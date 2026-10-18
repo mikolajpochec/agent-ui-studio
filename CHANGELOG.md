@@ -4,6 +4,8 @@ Notable changes to UI Studio. Versions follow [Semantic Versioning](https://semv
 
 ## Unreleased
 
+## 1.0.2 (2026-10-19)
+
 - Questions come with clickable answers in the chat (`uis ask`), so you never have to type a reply. Choices between looks are shown as variants instead.
 - Claude keeps studio messages to one to three short lines.
 
