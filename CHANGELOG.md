@@ -4,6 +4,8 @@ Notable changes to UI Studio. Versions follow [Semantic Versioning](https://semv
 
 ## Unreleased
 
+## 1.0.0 (2026-10-18)
+
 First release.
 
 - The studio window: your real component isolated on its own workbench, live tiles for every UX state, a chat with attachments, live status and suggestion cards that follow the work, fullscreen.
@@ -13,3 +15,4 @@ First release.
 - Checkpoints you can restore.
 - Finish (or closing the window) ends the session, removes everything studio-specific and summarizes the work in Claude Code.
 - Update notice when a newer release is out, and `ui-studio update`.
+
