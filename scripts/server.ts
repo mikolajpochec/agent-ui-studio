@@ -36,6 +36,9 @@ state.finished = false;
 state.workbench ??= [];
 state.states ??= [];
 state.statesMode ??= "unset"; // unset | declared | single
+// A picked variant is shown in the live preview and the state tiles at once, until the agent has made it the real
+// code and closes compare. Not kept across restarts: an instance variant's dev server proxy would be gone.
+state.preview = null;
 
 const nextId = (p: string) => `${p}${++state.seq}`;
 let saveTimer: any;
@@ -202,6 +205,7 @@ function restore(id: string) {
     else { mkdirSync(dirname(abs), { recursive: true }); copyFileSync(join(snapDir(from.id), rel), abs); }
   }
   state.current = id;
+  state.preview = null;
   broadcast();
   return snap;
 }
@@ -364,6 +368,7 @@ if (cfg.mode === "app") { startProxy(cfg.upstream); if (cfg.watch) watchDir(proj
 // ---------- compare ----------
 
 function setCompare(body: any) {
+  state.preview = null; // the agent closing compare (or opening a new one) means the pick is real code now
   if (!body || body.close) { state.compare = null; broadcast(); return; }
   const variants = (body.variants || []).map((v: any) => ({
     id: String(v.id),
@@ -443,6 +448,7 @@ function contextText() {
     `UX states: ${state.statesMode === "single" ? "single state" : state.states.map((s: any) => s.id).join(", ") || "(not declared yet)"}`,
     `Checkpoints: ${state.snapshots.map((s: any) => `${s.id} "${s.label}"`).join(", ") || "(none)"}; current ${state.current || "-"}`,
     `Compare open: ${state.compare ? state.compare.variants.map((v: any) => v.id).join(", ") : "no"}`,
+    `Picked variant shown in the preview: ${state.preview ? `${state.preview.id} (until you run compare --close)` : "none"}`,
     "", "Conversation:",
   ];
   for (const m of state.messages) {
@@ -541,8 +547,13 @@ const studio = Bun.serve({
         const { id } = await json(req);
         const v = state.compare?.variants.find((v: any) => v.id === id);
         if (!v) return Response.json({ ok: false, error: "unknown variant" });
+        // The user sees the pick at once: compare closes and the live preview renders that variant until the agent
+        // has turned it into the real code.
+        state.preview = { id: v.id, label: v.label, appUrl: v.appUrl, switch: v.switch, frame: v.frame || state.frames[v.id] || null };
+        state.compare = null;
         const m = addMessage({ role: "user", text: `Picked “${v.label}”`, delivered: false });
         pushEvent({ type: "pick", variant: v.id, label: v.label, msgId: m.id });
+        broadcast();
         return Response.json({ ok: true });
       }
       if (p === "/api/compare-layout" && req.method === "POST") {
@@ -622,6 +633,7 @@ const studio = Bun.serve({
         if (state.statesMode === "unset") checkpoint(label); // throws the states message first
         const v = await verify(state.target);
         if (!v.ok) throw new Error(`checkpoint refused, the preview is broken:\n${v.report}`);
+        state.preview = null; // a checkpoint is the real code, so a picked variant no longer needs to be shown
         return agentReply({ id: checkpoint(label) });
       }
       if (p === "/agent/check") {

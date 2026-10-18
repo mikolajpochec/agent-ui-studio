@@ -43,7 +43,7 @@ Every `uis` command can print `EVENTS (handle before continuing):`. When it does
 | `interrupt` | Stop the current step at once. Don't checkpoint it. `uis say` one line on where you stopped, then handle any prompt that came with it, or wait. |
 | `restored` `{checkpoint}` | The user restored a checkpoint, so the files on disk changed. Re-read the tracked files before editing again. |
 | `compare_request` `{checkpoints, mode}` | Build a live comparison of those states (see Compare). `id: "live"` means the current code; `s0` is the original. |
-| `pick` `{variant}` | The user chose a variant in compare. Make it the real code, remove all variant scaffolding (the workbench stays), close compare (`uis compare --close`), checkpoint, and say what is now in place. |
+| `pick` `{variant}` | The user chose a variant in compare. The studio has already closed compare and shows that variant in the live preview and the state tiles, so the user sees the result at once. Make it the real code, remove all variant scaffolding (the workbench stays), then run `uis compare --close` (the preview goes back to rendering the plain app, which now looks the same) and checkpoint, and say what is now in place. With instance variants, run `compare --close` before stopping their dev servers. |
 | `compare_closed` | The user went back to live view without picking. Remove the variant scaffolding, keep the code the default branch rendered, and checkpoint if anything changed. |
 | `page_error` `{message, where}` | The preview logged an error (runtime exception, rejected promise, `console.error`, hydration mismatch). Fix it before any further design work, then `uis check`. Errors are never shown to the user; fixing them is your job. Ignore only errors that also occur in the untouched app and are unrelated to the target, and say so once in the chat. |
 | `preview_error` `{message}` | A preview could not render the target even after reloading. The user sees an "unavailable" panel. Treat it as urgent: find out why (selector changed, route broken, compile error), fix it, and confirm with `uis check`. |
@@ -141,7 +141,7 @@ uis compare a:"Soft & rounded" b:"Sharp & bold" c:"Outlined" --title "Three dire
 uis compare before:"Original" after:"Current" --layout slider --title "Before / after"
 ```
 
-Layouts: `grid`, `side` (side by side), `slider` (before/after wipe). The user can switch layouts and comment on or pick any tile.
+Layouts: `grid`, `side` (side by side), `slider` (before/after wipe). Up to 3 variants the grid is one row; from 4 on it fits them into rows and columns. The user can switch layouts and comment on or pick any tile.
 
 Switch patterns (mark every one with a `ui-studio variant` comment):
 

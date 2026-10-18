@@ -271,6 +271,14 @@ function setRoute(url) {
 
 let live = null;
 let lastTarget = "";
+// What the live preview and the state tiles render: the app, or a variant the user just picked (until the agent has
+// made it the real code).
+const source = () => {
+  const p = S.preview;
+  return { appUrl: p?.appUrl || S.config.appUrl, variant: p?.switch ? p.id : null };
+};
+let liveVariant = null;
+let liveSwapping = false;
 
 // Each rework gets its own color from its title, so several studio windows are easy to tell apart.
 let identity = "";
@@ -309,15 +317,16 @@ function render() {
 function renderLive() {
   const host = $("#live");
   if (S.config.mode === "frames") {
-    const src = S.frames.live;
+    const src = (S.preview && (S.preview.frame || S.frames[S.preview.id])) || S.frames.live;
     if (!src) { if (!host.querySelector(".empty")) host.replaceChildren(h("div", "empty", "Waiting for the first frame from the device…")); return; }
     if (!live) { host.replaceChildren(); live = new View(host, { image: src, group: "live" }); }
     else live.setImage(src);
     return;
   }
-  const url = S.config.appUrl + S.target.route;
-  if (!live) live = new View(host, { url, group: "live" });
-  else live.setUrl(url);
+  const { appUrl, variant } = source();
+  const url = appUrl + S.target.route;
+  if (!live) { live = new View(host, { url, variant, group: "live" }); liveVariant = variant; }
+  else if (variant !== liveVariant || url !== live.url) swapLive(url, variant);
   const t = JSON.stringify(S.target);
   if (t !== lastTarget) {
     lastTarget = t;
@@ -325,6 +334,26 @@ function renderLive() {
     configureAll();
     setRoute(currentRoute || S.target.route);
   }
+}
+
+// A new variant (or app) is built over the current preview and shown once it has rendered, so a pick shows up
+// without a loading flash. Compare stays up until then (see renderCompare).
+function swapLive(url, variant) {
+  liveVariant = variant;
+  liveSwapping = true;
+  const fresh = new View($("#live"), { url, variant, group: "live" });
+  fresh.box.style.opacity = "0";
+  live = fresh;
+  const t0 = Date.now();
+  const reveal = () => {
+    if (live !== fresh) return; // superseded by a newer swap
+    if (!fresh.info?.found && Date.now() - t0 < 3000) return void setTimeout(reveal, 40);
+    fresh.box.style.opacity = "";
+    [...views].filter((v) => v.group === "live" && v !== fresh).forEach((v) => v.destroy());
+    liveSwapping = false;
+    renderCompare();
+  };
+  reveal();
 }
 
 // ---------- UX states ----------
@@ -343,7 +372,8 @@ function stateList() {
 function renderStates() {
   if (!S) return;
   const list = stateList();
-  const key = JSON.stringify([list, S.config.appUrl, S.target.route, S.target.selector]);
+  const src = source();
+  const key = JSON.stringify([list, src, S.target.route, S.target.selector]);
   if (key === statesKey) return;
   statesKey = key;
   [...views].filter((v) => v.group === "states").forEach((v) => v.destroy());
@@ -360,7 +390,7 @@ function renderStates() {
     t.append(h("span", "st-label", st.label), stage);
     slot.append(t);
     box.append(slot);
-    requestAnimationFrame(() => new View(stage, { url: S.config.appUrl + S.target.route, state: st.id, scope: "isolate", still: true, group: "states" }));
+    requestAnimationFrame(() => new View(stage, { url: src.appUrl + S.target.route, variant: src.variant, state: st.id, scope: "isolate", still: true, group: "states" }));
   }
 }
 
@@ -384,7 +414,8 @@ function openStatePop(id) {
   // The previous state stays up (or the popup stays invisible) until the new one has rendered,
   // so opening and stepping never flash the loading cover. Views overlap: .view is absolute.
   const old = [...views].filter((v) => v.group === "pop");
-  const view = new View($("#spStage"), { url: S.config.appUrl + S.target.route, state: st.id, scope: "isolate", still: true, maxZoom: 4, group: "pop" });
+  const src = source();
+  const view = new View($("#spStage"), { url: src.appUrl + S.target.route, variant: src.variant, state: st.id, scope: "isolate", still: true, maxZoom: 4, group: "pop" });
   view.box.style.opacity = "0";
   if (opening) pop.style.opacity = "0";
   const t0 = Date.now();
@@ -430,6 +461,7 @@ const cmpViews = (body) => [...views].filter((v) => (v.group === "cmp" || v.grou
 
 function renderCompare() {
   const c = S.compare;
+  if (!c && liveSwapping && cmpKey) return; // a pick is loading in the live preview: compare stays up until it shows
   $("#compare").hidden = !c;
   const key = c ? JSON.stringify([c, sliderSel, cmpState]) : "";
   if (key === cmpKey) return;
@@ -463,6 +495,7 @@ function renderCompare() {
     old.remove();
     body.id = "cmpBody";
     body.removeAttribute("style");
+    fitGrid(body);
   };
   swap();
 }
@@ -486,7 +519,31 @@ function fillCompare(c, body) {
   $("#sliderPick").hidden = !slider || c.variants.length < 3;
   if (slider) renderWipe(c, body);
   else c.variants.forEach((v, i) => body.append(tile(v, i)));
+  fitGrid(body);
 }
+
+// Grid: up to 3 variants in one row; from 4 on, rows and columns, picking the column count that gives every
+// tile the largest preview at the main preview's aspect ratio.
+const TILE_HEAD = 36, GAP = 10;
+function fitGrid(body = $("#cmpBody")) {
+  if (!body.classList.contains("lay-grid")) { body.style.removeProperty("--cols"); body.style.removeProperty("--rows"); return; }
+  const n = body.children.length;
+  let best = { cols: n, rows: 1 };
+  if (n > 3) {
+    const W = body.clientWidth - GAP, H = body.clientHeight - GAP;
+    const a = (live?.host.clientWidth || 16) / (live?.host.clientHeight || 9);
+    let bestScale = -1;
+    for (let cols = 2; cols < n; cols++) {
+      const rows = Math.ceil(n / cols);
+      const w = W / cols - GAP, h = H / rows - GAP - TILE_HEAD;
+      const scale = Math.min(w / a, h);
+      if (scale > bestScale) { bestScale = scale; best = { cols, rows }; }
+    }
+  }
+  body.style.setProperty("--cols", best.cols);
+  body.style.setProperty("--rows", best.rows);
+}
+new ResizeObserver(() => fitGrid()).observe($("#compare"));
 
 const variantUrl = (v) => v.appUrl + (currentRoute || S.target.route);
 const variantImage = (v) => (S.config.mode === "frames" ? v.frame || S.frames[v.id] || null : null);
