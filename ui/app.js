@@ -464,9 +464,10 @@ function renderStateSelect(list) {
 // ---------- compare ----------
 
 let cmpKey = "";
+let cmpLayout = null;
 let cmpState = null;
 let sliderSel = null;
-let wipePos = store.get("wipe", 50);
+let wipePos = 50; // the slider starts in the middle each time it appears
 
 let cmpPending = null; // tiles being built on top of the current ones (see renderCompare)
 const cmpViews = (body) => [...views].filter((v) => (v.group === "cmp" || v.group === "wipe") && body.contains(v.host));
@@ -479,6 +480,8 @@ function renderCompare() {
   if (key === cmpKey) return;
   const sameSet = c && cmpKey && cmpKey.startsWith(JSON.stringify([c, sliderSel]).slice(0, -1) + ",");
   const opening = c && !cmpKey;
+  if (c?.layout === "slider" && (opening || cmpLayout !== "slider")) wipePos = 50;
+  cmpLayout = c?.layout || null;
   cmpKey = key;
   if (cmpPending) { cmpViews(cmpPending).forEach((v) => v.destroy()); cmpPending.remove(); cmpPending = null; }
   const old = $("#cmpBody");
@@ -626,7 +629,7 @@ function renderWipe(c, body) {
     handle.setPointerCapture(e.pointerId);
     document.body.classList.add("dragging");
     const move = (ev) => { const r = wipe.getBoundingClientRect(); wipePos = Math.min(100, Math.max(0, ((ev.clientX - r.left) / r.width) * 100)); place(); };
-    const up = () => { document.body.classList.remove("dragging"); store.set("wipe", wipePos); handle.removeEventListener("pointermove", move); handle.removeEventListener("pointerup", up); };
+    const up = () => { document.body.classList.remove("dragging"); handle.removeEventListener("pointermove", move); handle.removeEventListener("pointerup", up); };
     handle.addEventListener("pointermove", move);
     handle.addEventListener("pointerup", up);
   });
