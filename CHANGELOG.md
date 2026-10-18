@@ -4,6 +4,8 @@ Notable changes to UI Studio. Versions follow [Semantic Versioning](https://semv
 
 ## Unreleased
 
+## 1.0.1 (2026-10-19)
+
 - Fixed: the update check no longer breaks `ui-studio list` (its cache moved to `~/.cache/ui-studio`).
 - Fixed: the update check waits up to 3 s, so a slow first connection to GitHub doesn't miss a release.
 
