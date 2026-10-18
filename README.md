@@ -14,30 +14,13 @@ A [Claude Code](https://claude.com/claude-code) skill for designing UI live. Poi
 
 ## Install
 
-### Ask your agent (recommended)
-
 Tell Claude Code:
 
 > Install the UI Studio skill from https://github.com/mikolajpochec/claude-ui-studio
 
-That's it. The steps it follows are under [For agents](#for-agents) below.
+It sets everything up (asking before it installs [Bun](https://bun.sh), if you don't have it) and tells you when it's ready. Later, ask it to update the skill the same way.
 
-### Manually
-
-```sh
-git clone https://github.com/mikolajpochec/claude-ui-studio ~/.claude/skills/ui-studio
-```
-
-For a single project instead of all of them, clone it into `<project>/.claude/skills/ui-studio`. If you use a custom `CLAUDE_CONFIG_DIR`, clone it into `$CLAUDE_CONFIG_DIR/skills/ui-studio`.
-
-To update: `git -C ~/.claude/skills/ui-studio pull`.
-
-### Requirements
-
-- [Claude Code](https://claude.com/claude-code)
-- [Bun](https://bun.sh) 1.1 or newer (runs the studio server)
-- A Chromium-based browser (Chrome, Brave, Edge, Chromium or Vivaldi) for the standalone studio window. Without one, the studio opens in your default browser.
-- macOS or Linux. On Windows the window opens in Edge; the rest is untested.
+The studio opens in a Chromium-based browser window (Chrome, Brave, Edge, Chromium or Vivaldi) and runs on macOS and Linux.
 
 ## Use
 
