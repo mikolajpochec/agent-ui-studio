@@ -214,6 +214,85 @@
     if (key !== last) { last = key; post(msg); }
   }
 
+  // ---------- DOM snapshot (checkpoints for before/after) ----------
+  // The target as static HTML: every element carries its computed style inline (only what differs from both the
+  // tag's default and its parent, so inheritance stays right), pseudo-elements become rules, and the page's
+  // @font-face and used @keyframes rules come along. The studio keeps one per checkpoint and UX state.
+
+  const SKIP = /^(SCRIPT|NOSCRIPT|TEMPLATE|STYLE|LINK)$/;
+  const tagDefaults = new Map();
+  function defaultsFor(tag, ns) {
+    const key = ns + tag;
+    if (tagDefaults.has(key)) return tagDefaults.get(key);
+    const box = document.createElement("div");
+    box.style.cssText = "all:initial;position:absolute;left:-9999px;top:0";
+    const el = ns === "svg" ? document.createElementNS("http://www.w3.org/2000/svg", tag) : document.createElement(tag);
+    if (ns === "svg" && tag !== "svg") { const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg"); svg.append(el); box.append(svg); }
+    else box.append(el);
+    root.append(box);
+    const cs = getComputedStyle(el), o = {};
+    for (const p of cs) o[p] = cs.getPropertyValue(p);
+    box.remove();
+    tagDefaults.set(key, o);
+    return o;
+  }
+  const props = (cs) => [...cs].filter((p) => !p.startsWith("--"));
+  function styleText(cs, def, parent) {
+    let out = "";
+    for (const p of props(cs)) {
+      const v = cs.getPropertyValue(p);
+      if (v === def[p] && (!parent || v === parent.getPropertyValue(p))) continue;
+      out += `${p}:${v};`;
+    }
+    return out;
+  }
+  function snapshotDoc() {
+    const src = target || document.body;
+    const rules = [], anims = new Set();
+    let n = 0;
+    const walk = (el, clone, parentCs) => {
+      const cs = getComputedStyle(el);
+      const ns = el instanceof SVGElement ? "svg" : "html";
+      const def = defaultsFor(el.localName, ns);
+      clone.removeAttribute("style");
+      for (const a of [...clone.attributes]) if (a.name.startsWith("data-uis-") || a.name.startsWith("on")) clone.removeAttribute(a.name);
+      clone.setAttribute("style", styleText(cs, def, parentCs));
+      if (cs.animationName && cs.animationName !== "none") cs.animationName.split(",").forEach((a) => anims.add(a.trim()));
+      for (const pseudo of ["::before", "::after"]) {
+        const ps = getComputedStyle(el, pseudo);
+        if (!ps.content || ps.content === "none" || ps.content === "normal") continue;
+        clone.setAttribute("data-uis-p", String(++n));
+        rules.push(`[data-uis-p="${n}"]${pseudo}{${styleText(ps, defaultsFor("span", "html"), cs)}}`);
+      }
+      if (el.localName === "img") { clone.setAttribute("src", el.currentSrc || el.src); clone.removeAttribute("srcset"); clone.removeAttribute("loading"); }
+      if (el.localName === "canvas") { try { const img = document.createElement("img"); img.src = el.toDataURL(); img.setAttribute("style", clone.getAttribute("style")); clone.replaceWith(img); } catch {} return; }
+      if (el.localName === "input" || el.localName === "textarea") { clone.setAttribute("value", el.value); if (el.localName === "textarea") clone.textContent = el.value; if (el.checked) clone.setAttribute("checked", ""); }
+      if (cs.display === "none") { clone.replaceChildren(); return; }
+      const kids = [...el.children], ckids = [...clone.children];
+      for (let i = 0; i < kids.length; i++) {
+        if (SKIP.test(kids[i].tagName)) { ckids[i].remove(); continue; }
+        walk(kids[i], ckids[i], cs);
+      }
+    };
+    const clone = src.cloneNode(true);
+    walk(src, clone, null);
+    if (src !== document.body) clone.setAttribute("data-uis-snap-root", "");
+    const sheetRules = [];
+    for (const sh of document.styleSheets) {
+      let list;
+      try { list = sh.cssRules; } catch { continue; }
+      const base = sh.href || location.href;
+      for (const r of list) {
+        if (r instanceof CSSFontFaceRule) sheetRules.push(r.cssText.replace(/url\((['"]?)([^'")]+)\1\)/g, (m, q, u) => { try { return `url("${new URL(u, base).href}")`; } catch { return m; } }));
+        else if (r instanceof CSSKeyframesRule && anims.has(r.name)) sheetRules.push(r.cssText);
+      }
+    }
+    const bg = target ? look(target).backdrop : null;
+    const body = src === document.body ? `<div data-uis-snap-root style="${clone.getAttribute("style") || ""}">${clone.innerHTML}</div>` : clone.outerHTML;
+    return `<!doctype html><html><head><meta charset="utf-8"><style>html,body{margin:0}body{padding:48px}${sheetRules.join("\n")}\n${rules.join("\n")}</style></head>` +
+      `<body><div style="display:flow-root;width:max-content;${bg ? `background:${bg};` : ""}">${body}</div></body></html>`;
+  }
+
   let queued = false;
   // rAF is paused in off-screen cross-origin frames (used for render checks), so a timer backs it up.
   const schedule = () => {
@@ -228,6 +307,7 @@
     const d = e.data;
     if (!d || !d.__uis || e.source !== window.parent) return;
     if (d.type === "config") { cfg = { ...cfg, selector: d.selector, scope: d.scope }; last = ""; schedule(); }
+    if (d.type === "serialize") { let html = null; try { update(); html = snapshotDoc(); } catch (err) { report(`snapshot failed: ${text(err)}`); } post({ type: "dom", req: d.req, html }); }
   });
 
   const start = () => {

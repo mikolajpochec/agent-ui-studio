@@ -208,6 +208,7 @@ addEventListener("message", (e) => {
   if (d.type === "ready") { v.info = null; v.configure(); if (v === live) setRoute(d.url); }
   else if (d.type === "rect") { v.setInfo(d); layoutGroup(v.group); if (v === live) renderStates(); }
   else if (d.type === "nav" && v === live) setRoute(d.url);
+  else if (d.type === "dom") v.onDom?.(d.html);
   else if (d.type === "error") {
     if (v.errors) v.errors.push(d.message);
     else forwardError(d.message, `${v.group}${v.state ? ` (${v.state})` : ""} ${d.where || ""}`.trim());
@@ -231,7 +232,17 @@ function reportPreviewError(message) {
 
 // Render check requested by the server before a target switch or checkpoint: render the target
 // off-screen in every state and report whether it appears and which errors the page logged.
-function runProbe({ id, target, states }) {
+// Asks a view's page for its target as frozen HTML (see inject.js); null if it can't.
+function serializeView(v) {
+  return new Promise((resolve) => {
+    const t = setTimeout(() => { v.onDom = null; resolve(null); }, 5000);
+    v.onDom = (html) => { clearTimeout(t); v.onDom = null; resolve(html); };
+    try { v.frame.contentWindow.postMessage({ __uis: true, type: "serialize" }, "*"); } catch { clearTimeout(t); resolve(null); }
+  });
+}
+
+// With `capture` (checkpoints and the original), each rendered state is also frozen for before/after.
+function runProbe({ id, target, states, capture }) {
   const host = $("#probeHost");
   host.style.width = (live?.host.clientWidth || 1000) + "px";
   host.style.height = (live?.host.clientHeight || 700) + "px";
@@ -249,11 +260,12 @@ function runProbe({ id, target, states }) {
       clearInterval(poll);
       clearTimeout(timer);
       // After it renders, keep listening briefly: hydration errors arrive right after.
-      setTimeout(() => {
+      setTimeout(async () => {
         const errors = [...new Set(v.errors)].slice(0, 5);
+        const dom = capture && found ? await serializeView(v) : null;
         v.destroy();
         cell.remove();
-        resolve({ label: st.label, found, errors });
+        resolve({ label: st.label, state: st.id, found, errors, dom });
       }, found ? 1500 : 0);
     };
     const poll = setInterval(() => { if (v.info && (v.info.found || !target.selector)) finish(true); }, 150);
@@ -311,7 +323,7 @@ function render() {
   renderPill();
   renderSegs();
   $("#beforeAfterBtn").disabled = !S.snapshots.some((s) => s.id === "s0");
-  $("#beforeAfterBtn").title = $("#beforeAfterBtn").disabled ? "Available after the agent starts editing" : "Ask the agent to set up a live before/after";
+  $("#beforeAfterBtn").title = $("#beforeAfterBtn").disabled ? "Available after the agent starts editing" : "Slide between the current version and the last checkpoint";
 }
 
 function renderLive() {
@@ -517,6 +529,18 @@ function fillCompare(c, body) {
   body.className = "cmp-body lay-" + c.layout;
   const slider = c.layout === "slider";
   $("#sliderPick").hidden = !slider || c.variants.length < 3;
+  // Before/after: the checkpoint on the left can be any other one.
+  const ba = c.mode === "before_after";
+  $("#baPick").hidden = !ba;
+  if (ba) {
+    const sel = $("#baBefore");
+    sel.replaceChildren(...S.snapshots.filter((x) => x.dom?.length).map((x) => {
+      const o = h("option", null, x.id === "s0" ? "Original" : `${x.id} · ${x.label}`);
+      o.value = x.id;
+      return o;
+    }));
+    sel.value = c.before;
+  }
   if (slider) renderWipe(c, body);
   else c.variants.forEach((v, i) => body.append(tile(v, i)));
   fitGrid(body);
@@ -548,18 +572,21 @@ new ResizeObserver(() => fitGrid()).observe($("#compare"));
 const variantUrl = (v) => v.appUrl + (currentRoute || S.target.route);
 const variantImage = (v) => (S.config.mode === "frames" ? v.frame || S.frames[v.id] || null : null);
 // With a state picked, tiles show that state and are not interactive; otherwise they are fully live.
-const variantView = (host, v, group = "cmp") => new View(host, {
-  url: variantUrl(v), variant: v.switch ? v.id : null, state: cmpState, still: !!cmpState, group, image: variantImage(v),
-});
+const variantView = (host, v, group = "cmp") => v.dom
+  // A checkpoint frozen by the studio: static HTML of the target in the chosen state.
+  ? new View(host, { url: `${v.appUrl}/__uis/dom/${v.dom}/${cmpState || "default"}.html`, selector: "[data-uis-snap-root]", still: !!cmpState, group })
+  : new View(host, { url: variantUrl(v), variant: v.switch ? v.id : null, state: cmpState, still: !!cmpState, group, image: variantImage(v) });
 $("#cmpState").onchange = (e) => { cmpState = e.target.value || null; renderCompare(); };
 
 function variantActions(v) {
   const frag = document.createDocumentFragment();
   const comment = h("button", "btn ghost small", "Comment");
   comment.onclick = () => addAbout(v);
+  frag.append(comment);
+  if (S.compare?.mode === "before_after") return frag; // nothing to pick: one side is a frozen checkpoint
   const pick = h("button", "btn primary small", "Use this");
   pick.onclick = () => post("/api/pick", { id: v.id });
-  frag.append(comment, pick);
+  frag.append(pick);
   return frag;
 }
 
@@ -711,7 +738,8 @@ $("#compareSelBtn").onclick = () => {
   chatKey = "";
   renderChat();
 };
-$("#beforeAfterBtn").onclick = () => post("/api/compare-request", { ids: ["s0", "live"], mode: "before_after" });
+$("#beforeAfterBtn").onclick = () => post("/api/before-after", {});
+$("#baBefore").onchange = (e) => post("/api/before-after", { before: e.target.value });
 
 // ---------- status, suggestions, agent ----------
 

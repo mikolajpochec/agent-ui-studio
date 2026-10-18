@@ -167,6 +167,12 @@ switch (cmd) {
     if (r.content === null) console.log("(file did not exist at that checkpoint)"); else process.stdout.write(r.content);
     printEvents(r.events); break;
   }
+  case "before-after": {
+    const r = await call("/agent/before-after", { before: o._[0] });
+    console.log(r.built ? `before/after open: ${r.id} (${r.label}) vs current` : `NOT BUILT: ${r.id} has no frozen snapshot; build it live (see Compare)`);
+    printEvents(r.events);
+    break;
+  }
   case "compare": {
     // compare original:"Original" a:"Bold" b:"Minimal" --layout grid|side|slider --title "..." ; id@http://... runs a variant on its own dev server
     if (o.close) { const r = await call("/agent/compare", { close: true }); console.log("closed"); printEvents(r.events); break; }
@@ -230,6 +236,7 @@ switch (cmd) {
   track <file>...                               snapshot originals BEFORE first edit
   checkpoint <label>                            save tracked files as a restorable step
   restore <id> | show <id> <file>
+  before-after [checkpoint]                    slider: current vs last checkpoint (or the given one)
   compare <id[@upstream][:label]>... [--layout grid|side|slider] [--title T] | compare --close
   target [--route R] [--selector S] [--scope element|isolate|page]   verified first; refused if it would not render
   check                                         render the target in every state and report errors

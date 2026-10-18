@@ -153,6 +153,70 @@ function relPath(f: string) {
   return rel;
 }
 const snapDir = (id: string) => join(sessionDir, "snapshots", id, "files");
+// Frozen HTML of the target per UX state (made by inject.js during the checkpoint's render check), for before/after.
+const domDir = (id: string) => join(sessionDir, "snapshots", id, "dom");
+function saveDom(id: string, results: any[] = []) {
+  const snap = state.snapshots.find((s: any) => s.id === id);
+  if (!snap) return;
+  const saved: string[] = [];
+  for (const r of results) {
+    if (!r.found || !r.dom) continue;
+    mkdirSync(domDir(id), { recursive: true });
+    const name = r.state || "default";
+    writeFileSync(join(domDir(id), `${name}.html`), r.dom);
+    saved.push(name);
+  }
+  if (saved.length) { snap.dom = saved; broadcast(); }
+}
+function domResponse(pathname: string) {
+  const m = pathname.match(/^\/__uis\/dom\/(s\d+)\/([\w-]+)\.html$/);
+  const file = m && [join(domDir(m[1]), `${m[2]}.html`), join(domDir(m[1]), "default.html")].find((f) => existsSync(f));
+  if (!file) return new Response("no snapshot", { status: 404 });
+  return new Response(injectHtml(readFileSync(file, "utf8"), false), { headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" } });
+}
+// Opens the studio-built before/after slider (current code vs a frozen checkpoint). `built: false` when that
+// checkpoint has no frozen DOM (older session, frames mode): the agent then has to build it live.
+function openBeforeAfter(before?: string) {
+  const id = before || defaultBefore();
+  const snap = state.snapshots.find((s: any) => s.id === id);
+  if (!snap) return { error: `unknown checkpoint: ${id}` };
+  const label = snap.id === "s0" ? "Original" : snap.label;
+  if (!snap.dom?.length || cfg.mode === "frames") return { built: false, id, label };
+  state.preview = null;
+  state.compare = {
+    title: "Before / after", layout: "slider", mode: "before_after", before: id,
+    variants: [
+      { id: "before", label, appUrl: mainAppUrl(), switch: false, dom: id },
+      { id: "live", label: "Current", appUrl: mainAppUrl(), switch: false },
+    ],
+  };
+  broadcast();
+  return { built: true, id, label };
+}
+
+// Whether the tracked files differ from a checkpoint.
+function changedSince(id: string) {
+  const snap = state.snapshots.find((s: any) => s.id === id);
+  const base = state.snapshots.find((s: any) => s.id === "s0");
+  if (!snap || !base) return false;
+  for (const rel of state.tracked) {
+    const from = rel in snap.files ? snap : base;
+    const abs = join(projectRoot, rel);
+    const was = from.files[rel] === "absent" ? null : readFileSync(join(snapDir(from.id), rel));
+    const now = existsSync(abs) ? readFileSync(abs) : null;
+    if (!was || !now ? was !== now : !was.equals(now)) return true;
+  }
+  return false;
+}
+// Before/after compares the current code with the last checkpoint: the current one if the code has moved on since,
+// otherwise the one before it (the original when there is none).
+function defaultBefore() {
+  const cur = state.current;
+  if (!cur) return "s0";
+  if (changedSince(cur)) return cur;
+  const i = state.snapshots.findIndex((s: any) => s.id === cur);
+  return i > 0 ? state.snapshots[i - 1].id : "s0";
+}
 
 function copyInto(id: string, rel: string) {
   const src = join(projectRoot, rel);
@@ -279,6 +343,7 @@ function startProxy(upstream: string) {
     async fetch(req, srv) {
       const url = new URL(req.url);
       if (url.pathname === INJECT_PATH) return injectJs();
+      if (url.pathname.startsWith("/__uis/dom/")) return domResponse(url.pathname);
       if (url.pathname === "/__uis/reload") { srv.timeout?.(req, 0); return reloadStream(); }
       if (req.headers.get("upgrade")?.toLowerCase() === "websocket") {
         const protocols = (req.headers.get("sec-websocket-protocol") || "").split(",").map((s) => s.trim()).filter(Boolean);
@@ -342,6 +407,7 @@ function startStatic(root: string) {
     async fetch(req, srv) {
       const url = new URL(req.url);
       if (url.pathname === INJECT_PATH) return injectJs();
+      if (url.pathname.startsWith("/__uis/dom/")) return domResponse(url.pathname);
       if (url.pathname === "/__uis/reload") { srv.timeout?.(req, 0); return reloadStream(); }
       let p = resolve(root, "." + decodeURIComponent(url.pathname));
       if (!p.startsWith(root)) return new Response("forbidden", { status: 403 });
@@ -403,27 +469,27 @@ async function httpCheck(route: string) {
   }
 }
 
-function browserCheck(target: any, states: any[]): Promise<any> {
+function browserCheck(target: any, states: any[], capture = false): Promise<any> {
   if (!clients.size) return Promise.resolve({ skipped: true });
   const id = nextId("p");
   return new Promise((resolve) => {
     const t = setTimeout(() => { probes.delete(id); resolve({ timeout: true }); }, 45_000);
     probes.set(id, (r) => { clearTimeout(t); probes.delete(id); resolve(r); });
-    for (const c of clients) sse(c, { type: "probe", id, target, states });
+    for (const c of clients) sse(c, { type: "probe", id, target, states, capture });
   });
 }
 
-async function verify(target: any, states = stateTargets()) {
+async function verify(target: any, states = stateTargets(), capture = false) {
   if (cfg.mode === "frames") return { ok: true, report: "frames mode: not verified" };
   const http = await httpCheck(target.route);
   if (!http.ok) return { ok: false, report: `${target.route} answers HTTP ${http.status || "nothing"} (waited 25s for the dev server)` };
-  const b = await browserCheck(target, states);
+  const b = await browserCheck(target, states, capture);
   if (b.skipped) return { ok: true, report: `HTTP ${http.status}; render check skipped (no studio window open)` };
   if (b.timeout) return { ok: false, report: "the studio window did not finish rendering the previews within 45s" };
   const bad = b.results.filter((r: any) => !r.found || r.errors.length);
   const report = b.results.map((r: any) =>
     `${r.label}: ${r.found ? "renders" : `TARGET NOT FOUND (${target.selector})`}${r.errors.length ? `; errors: ${r.errors.join(" | ")}` : ""}`).join("\n");
-  return { ok: !bad.length, report };
+  return { ok: !bad.length, report, results: b.results };
 }
 
 // Runtime errors from previews go to the agent (deduped), never to the user.
@@ -447,7 +513,7 @@ function contextText() {
     `Workbench files: ${state.workbench.join(", ") || "(none)"}`,
     `UX states: ${state.statesMode === "single" ? "single state" : state.states.map((s: any) => s.id).join(", ") || "(not declared yet)"}`,
     `Checkpoints: ${state.snapshots.map((s: any) => `${s.id} "${s.label}"`).join(", ") || "(none)"}; current ${state.current || "-"}`,
-    `Compare open: ${state.compare ? state.compare.variants.map((v: any) => v.id).join(", ") : "no"}`,
+    `Compare open: ${!state.compare ? "no" : state.compare.mode === "before_after" ? `before/after vs ${state.compare.before} (built by the studio, nothing to do)` : state.compare.variants.map((v: any) => v.id).join(", ")}`,
     `Picked variant shown in the preview: ${state.preview ? `${state.preview.id} (until you run compare --close)` : "none"}`,
     "", "Conversation:",
   ];
@@ -543,8 +609,21 @@ const studio = Bun.serve({
         pushEvent({ type: "compare_request", checkpoints: snaps, mode: body.mode || "compare", msgId: m.id });
         return Response.json({ ok: true });
       }
+      // Before/after is built by the studio from the checkpoint's frozen DOM: the agent is not involved. Without one
+      // (an older session, frames mode) it falls back to asking the agent for a live comparison.
+      if (p === "/api/before-after" && req.method === "POST") {
+        const { before } = await json(req);
+        const r = openBeforeAfter(before);
+        if (r.error) return Response.json({ ok: false, error: r.error });
+        if (!r.built) {
+          const m = addMessage({ role: "user", text: `Compare: ${r.label} vs Current`, delivered: false });
+          pushEvent({ type: "compare_request", checkpoints: [{ id: r.id, label: r.label }, { id: "live", label: "Current" }], mode: "before_after", msgId: m.id });
+        }
+        return Response.json({ ok: true, built: r.built });
+      }
       if (p === "/api/pick" && req.method === "POST") {
         const { id } = await json(req);
+        if (state.compare?.mode === "before_after") return Response.json({ ok: false, error: "nothing to pick in before/after" });
         const v = state.compare?.variants.find((v: any) => v.id === id);
         if (!v) return Response.json({ ok: false, error: "unknown variant" });
         // The user sees the pick at once: compare closes and the live preview renders that variant until the agent
@@ -562,7 +641,8 @@ const studio = Bun.serve({
         return Response.json({ ok: true });
       }
       if (p === "/api/compare-close" && req.method === "POST") {
-        if (state.compare) { state.compare = null; pushEvent({ type: "compare_closed" }); }
+        // A studio-built before/after has no variant code behind it, so the agent has nothing to clean up.
+        if (state.compare) { const ba = state.compare.mode === "before_after"; state.compare = null; if (ba) broadcast(); else pushEvent({ type: "compare_closed" }); }
         return Response.json({ ok: true });
       }
       if (p.startsWith("/api/probe/") && req.method === "POST") {
@@ -624,17 +704,24 @@ const studio = Bun.serve({
         return agentReply();
       }
       if (p === "/agent/track") {
+        srv.timeout?.(req, 0);
         const { files = [] } = await json(req);
-        return agentReply({ added: track(files), tracked: state.tracked });
+        const first = !state.snapshots.some((s: any) => s.id === "s0");
+        const added = track(files);
+        // The original's look is frozen now, before the first edit, for before/after.
+        if (first && cfg.mode !== "frames") { const v = await verify(state.target, stateTargets(), true); saveDom("s0", v.results); }
+        return agentReply({ added, tracked: state.tracked });
       }
       if (p === "/agent/checkpoint") {
         srv.timeout?.(req, 0);
         const { label = "Checkpoint" } = await json(req);
         if (state.statesMode === "unset") checkpoint(label); // throws the states message first
-        const v = await verify(state.target);
+        const v = await verify(state.target, stateTargets(), true);
         if (!v.ok) throw new Error(`checkpoint refused, the preview is broken:\n${v.report}`);
         state.preview = null; // a checkpoint is the real code, so a picked variant no longer needs to be shown
-        return agentReply({ id: checkpoint(label) });
+        const id = checkpoint(label);
+        saveDom(id, v.results);
+        return agentReply({ id });
       }
       if (p === "/agent/check") {
         srv.timeout?.(req, 0);
@@ -656,6 +743,12 @@ const studio = Bun.serve({
         if (!from || !(rel in from.files)) throw new Error(`${rel} is not tracked`);
         const content = from.files[rel] === "absent" ? null : readFileSync(join(snapDir(from.id), rel), "utf8");
         return agentReply({ content });
+      }
+      if (p === "/agent/before-after") {
+        const { before } = await json(req);
+        const r = openBeforeAfter(before);
+        if (r.error) throw new Error(r.error);
+        return agentReply(r);
       }
       if (p === "/agent/compare") {
         setCompare(await json(req));
