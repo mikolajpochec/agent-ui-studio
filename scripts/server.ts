@@ -621,6 +621,15 @@ const studio = Bun.serve({
         }
         return Response.json({ ok: true, built: r.built });
       }
+      if (p === "/api/answer" && req.method === "POST") {
+        const { id, option } = await json(req);
+        const q = state.messages.find((m: any) => m.id === id && m.options);
+        if (!q || q.answered || !q.options.includes(option)) return Response.json({ ok: false, error: "not an open question" });
+        q.answered = option;
+        const m = addMessage({ role: "user", text: option, delivered: false, steer: true });
+        pushEvent({ type: "answer", question: q.text, answer: option, msgId: m.id });
+        return Response.json({ ok: true });
+      }
       if (p === "/api/pick" && req.method === "POST") {
         const { id } = await json(req);
         if (state.compare?.mode === "before_after") return Response.json({ ok: false, error: "nothing to pick in before/after" });
@@ -697,6 +706,13 @@ const studio = Bun.serve({
         state.suggestions = items.map((t: string) => ({ text: t, focus }));
         broadcast();
         return agentReply();
+      }
+      // A question with clickable answers in the chat: the user never has to type a reply.
+      if (p === "/agent/ask") {
+        const { question = "", options = [] } = await json(req);
+        if (!question || options.length < 2) throw new Error("ask needs a question and at least 2 options");
+        const m = addMessage({ role: "agent", text: question, options: options.slice(0, 5), answered: null });
+        return agentReply({ id: m.id });
       }
       if (p === "/agent/say") {
         const { text = "" } = await json(req);

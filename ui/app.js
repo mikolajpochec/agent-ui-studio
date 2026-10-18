@@ -685,7 +685,20 @@ function renderChat() {
   for (const m of S.messages) {
     if (m.role === "snapshot") { chat.append(snapRow(m)); continue; }
     const el = h("div", "msg " + m.role);
-    if (m.role === "agent") el.innerHTML = md(m.text);
+    if (m.role === "agent") {
+      el.innerHTML = md(m.text);
+      if (m.options) {
+        // Clickable answers: the first one is the agent's recommendation.
+        const row = h("div", "ask");
+        m.options.forEach((opt, i) => {
+          const b = h("button", "btn small " + (m.answered === opt ? "primary on" : i === 0 && !m.answered ? "primary" : "ghost"), opt);
+          b.disabled = !!m.answered;
+          b.onclick = () => post("/api/answer", { id: m.id, option: opt });
+          row.append(b);
+        });
+        el.append(row);
+      }
+    }
     else {
       if (m.about?.length) el.append(h("div", "about", "re: " + m.about.map((a) => a.label).join(", ")));
       if (m.text) el.append(h("div", null, m.text));

@@ -231,3 +231,6 @@ body.dragging iframe { pointer-events: none; }
 .view .cover.failed .spinner { display: none; }
 .probe-host { position: fixed; left: 0; top: 0; opacity: 0; pointer-events: none; z-index: -1; overflow: hidden; }
 .probe-cell { position: absolute; inset: 0; }
+.msg .ask { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.msg .ask .btn:disabled:not(.on) { opacity: .45; }
+.msg .ask .btn.on:disabled { opacity: 1; }

@@ -15,7 +15,7 @@ workbench + states  →  open  →  wait  →  handle events  →  work in visib
    - Declare the **UX states** the element has (see UX states) with `uis states`. This is obligatory: `checkpoint` refuses to run until states are declared.
 1. **Open.**
    - With a direction from the user: start on it right away (step 3).
-   - Without one: look at the current design, then `uis say` a one-line read of it, and `uis suggest` 4 to 6 *distinct* directions (for example "Quieter, more neutral", "Bolder, high contrast", "Softer, rounded", "Show me 3 options"). Then wait.
+   - Without one: look at the current design, then `uis say` a one-line read of it (one line, not a description of the page), and `uis suggest` 4 to 6 *distinct* directions (for example "Quieter, more neutral", "Bolder, high contrast", "Softer, rounded", "Show me 3 options"). Then wait.
 2. **Wait.** Run `uis wait --for 540` with the Bash `timeout` set to `600000`. It returns:
    - `EVENTS (handle before continuing):` followed by one JSON event per line, or
    - `NO_EVENTS`: call wait again.
@@ -40,6 +40,7 @@ Every `uis` command can print `EVENTS (handle before continuing):`. When it does
 | Event | What to do |
 |---|---|
 | `prompt` `{text, attachments, about, steer}` | A request. `attachments` are absolute paths; view images with Read. `about` lists compare variants the user is commenting on ("re: B"). With `steer: true` it was sent into the step you are working on (the Steer button, or a suggestion card clicked mid-work): adjust the current step to it, don't finish the old plan first. Without `steer` it is a new request: the user queued it, and the studio hands queued requests to you only through `wait`, one at a time, so finish and report the current request first, then take it as the next one. |
+| `answer` `{question, answer}` | The user clicked an answer to your `uis ask`. Act on it right away; it counts as a steering prompt. |
 | `interrupt` | Stop the current step at once. Don't checkpoint it. `uis say` one line on where you stopped, then handle any prompt that came with it, or wait. |
 | `restored` `{checkpoint}` | The user restored a checkpoint, so the files on disk changed. Re-read the tracked files before editing again. |
 | `compare_request` `{checkpoints, mode}` | Build a live comparison of those states (see Compare). `id: "live"` means the current code; `s0` is the original. With `mode: "before_after"` it always goes in the slider layout; you only get it when the studio has no frozen snapshot of that checkpoint (see Before/after). |
@@ -206,4 +207,11 @@ On `done`, or if the user tells you in the chat that they are done:
 
 ## Style of chat messages
 
-Short, concrete, no filler. Say what changed and give the numbers (`#4f46e5 → #4338ca`, `radius 6 → 10px`, `contrast 4.8:1`). Ask a question only when the user's direction is genuinely ambiguous; otherwise make a choice, show it, and let the suggestions offer the alternatives.
+The user is looking at the design, not reading. Every `say` is one to three short lines: what changed, with the numbers (`#4f46e5 → #4338ca`, `radius 6 → 10px`, `contrast 4.8:1`). No paragraphs, no descriptions of references or of the page, no plans written out.
+
+**Never make the user type an answer.** A chat message must not end with a question. Every decision goes through something they can click:
+- **A choice between looks:** build them as variants and open compare. Seeing beats reading ("black only, or a light theme too?" is two variants).
+- **Any other decision:** `uis ask "Keep a light theme?" "Black only" "Keep light too"`: 2 to 5 short options, your recommendation first. The answer arrives as an `answer` event.
+- **Next steps:** suggestion cards.
+
+Ask only when the direction is genuinely ambiguous; otherwise make a choice, show it, and let the cards offer the alternatives.

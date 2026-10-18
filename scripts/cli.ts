@@ -184,6 +184,15 @@ switch (cmd) {
   case "tick": { const r = await call("/agent/tick"); if (!r.events.length) console.log("NO_EVENTS"); printEvents(r.events); break; }
   case "status": { const r = await call("/agent/status", { focus: o._[0] || "", text: o._.slice(1).join(" ") }); console.log("ok"); printEvents(r.events); break; }
   case "suggest": { const r = await call("/agent/suggest", { items: o._, focus: o.focus || "" }); console.log("ok"); printEvents(r.events); break; }
+  case "ask": {
+    // ask "Question?" "Option A" "Option B" ... (2 to 5 options, recommended first)
+    const [question, ...options] = o._;
+    if (!question || options.length < 2) die('usage: ask "Question?" "Option A" "Option B" [...]');
+    const r = await call("/agent/ask", { question, options });
+    console.log("asked; the answer arrives as an `answer` event");
+    printEvents(r.events);
+    break;
+  }
   case "say": {
     const text = o._[0] === "-" || !o._.length ? await readStdin() : o._.join(" ");
     const r = await call("/agent/say", { text: text.trim() }); console.log("ok"); printEvents(r.events); break;
@@ -261,7 +270,8 @@ switch (cmd) {
   tick                                          non-blocking inbox check
   status <focus> [text...]                      "Working on <focus>…" under the preview
   suggest <card>... [--focus F]                 replace the suggestion grid
-  say <text> | say -  (stdin)                   chat reply (markdown)
+  say <text> | say -  (stdin)                   chat reply (markdown), one to three short lines
+  ask "Question?" "Option" "Option" [...]       question with clickable answers (2 to 5, recommended first)
   track <file>...                               snapshot originals BEFORE first edit
   checkpoint <label>                            save tracked files as a restorable step
   restore <id> | show <id> <file>
