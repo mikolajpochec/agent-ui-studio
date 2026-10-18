@@ -41,30 +41,3 @@ What it can preview:
 | Plain HTML and CSS | Live, served from disk with reload on save |
 | React Native with web support | Live, the web rendering |
 | Native iOS, Android, Flutter | Device screenshots after each change (the only non-live mode) |
-
-## How it works
-
-- `ui-studio start` launches a small Bun server for the session. It serves the studio UI and a reverse proxy in front of your dev server (with hot reload passing through) that injects a helper script into the page. The helper isolates the element, forces states like `:hover` and `:focus`, and reports render errors.
-- Claude works as a background agent that long-polls the studio for your messages and drives it through the `ui-studio` CLI: status, suggestions, chat, checkpoints, compare, states.
-- Before a preview is shown, the target is render-checked in every state, so a broken page, a 404 or a half-built workbench never reaches you.
-- Everything runs locally and binds to `127.0.0.1` only. Session history and checkpoints are stored in `~/.ui-studio/`.
-
-## Layout
-
-```
-SKILL.md                    what Claude reads first: picking the target and preview mode, starting the studio
-references/agent-loop.md    the background agent's loop, events, workbench and states recipes
-scripts/ui-studio           CLI entry point (scripts/cli.ts)
-scripts/server.ts           studio server, proxy and agent API
-ui/                         the studio UI and the script injected into previews
-docs/                       README images
-```
-
-## For agents
-
-If a user asks you to install this skill:
-
-1. Check that Bun is available: `bun --version`. If it is missing, ask the user before installing it (`brew install oven-sh/bun/bun` on macOS, or `curl -fsSL https://bun.sh/install | bash`).
-2. Clone the repository into the user's personal skills directory, `${CLAUDE_CONFIG_DIR:-$HOME/.claude}/skills/ui-studio`, unless the user wants it only for the current project; then use `<project root>/.claude/skills/ui-studio`. If the directory already exists, `git pull` inside it instead.
-3. Verify: `<skill dir>/scripts/ui-studio --help` prints the command list.
-4. Tell the user it's installed and that they can start with `/ui-studio <what to redesign>`. If `/ui-studio` does not show up yet, a restart of Claude Code loads it.
