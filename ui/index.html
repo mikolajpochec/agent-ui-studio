@@ -1,0 +1,127 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>UI Studio</title>
+<link rel="icon" id="favicon" href="data:,">
+<link rel="stylesheet" href="/ui/styles.css">
+</head>
+<body>
+<div id="app" class="app">
+  <main class="work">
+    <header class="toolbar">
+      <div class="tb-group tb-title">
+        <span class="logo" id="logo" aria-hidden="true"></span>
+        <div class="titles">
+          <span id="title" class="title">UI Studio</span>
+          <span id="route" class="route"></span>
+        </div>
+      </div>
+      <div class="tb-group">
+        <div class="seg" id="scopeSeg" role="group" aria-label="Scope">
+          <button data-v="element" title="Zoom to the element, keep its surroundings">Element</button>
+          <button data-v="isolate" title="Hide everything except the element">Isolate</button>
+          <button data-v="page" title="Whole page">Page</button>
+        </div>
+        <div class="seg" id="presetSeg" role="group" aria-label="Viewport">
+          <button data-v="fit" title="Fit the preview area">Fit</button>
+          <button data-v="1440" title="Desktop 1440×900">1440</button>
+          <button data-v="1024" title="Laptop 1024×768">1024</button>
+          <button data-v="768" title="Tablet 768×1024">768</button>
+          <button data-v="390" title="Phone 390×844">390</button>
+        </div>
+      </div>
+      <div class="tb-group">
+        <button class="btn ghost" id="beforeAfterBtn" title="Ask the agent to set up a live before/after">Before / After</button>
+        <button class="btn ghost" id="compareSelBtn" hidden>Compare</button>
+        <button class="icon-btn" id="reloadBtn" title="Reload preview"><svg viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-2.34-5.66M20 4v5h-5"/></svg></button>
+        <a class="icon-btn" id="openBtn" target="_blank" title="Open the app in a new tab"><svg viewBox="0 0 24 24"><path d="M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/></svg></a>
+        <button class="icon-btn" id="fsBtn" title="Fullscreen (F)"><svg viewBox="0 0 24 24"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg></button>
+      </div>
+    </header>
+
+    <section class="stage-wrap">
+      <div id="live" class="stage"></div>
+      <div id="states" class="states" hidden></div>
+      <div id="compare" class="compare" hidden>
+        <div class="cmp-head">
+          <span id="cmpTitle" class="cmp-title"></span>
+          <div class="seg" id="layoutSeg" role="group" aria-label="Layout">
+            <button data-v="grid">Grid</button>
+            <button data-v="side">Side by side</button>
+            <button data-v="slider">Slider</button>
+          </div>
+          <label id="cmpStateWrap" class="cmp-state" hidden>State <select id="cmpState" aria-label="State"></select></label>
+          <div id="sliderPick" class="slider-pick" hidden>
+            <select id="sliderA" aria-label="Left"></select><span>vs</span><select id="sliderB" aria-label="Right"></select>
+          </div>
+          <span class="spacer"></span>
+          <button class="btn ghost" id="cmpClose">Back to live</button>
+        </div>
+        <div id="cmpBody" class="cmp-body"></div>
+      </div>
+      <div id="dropHint" class="drop-hint" hidden>Drop images to attach</div>
+    </section>
+
+    <footer class="below">
+      <div id="status" class="statusline"></div>
+      <div id="cards" class="cards"></div>
+    </footer>
+  </main>
+
+  <aside class="side">
+    <div class="side-head">
+      <span id="agentPill" class="pill"><i></i><span>Connecting…</span></span>
+      <span class="spacer"></span>
+      <button class="btn ghost small" id="finishBtn">Finish</button>
+    </div>
+    <div id="chat" class="chat"></div>
+    <div id="dock" class="dock">
+      <form id="composer" class="composer" autocomplete="off">
+        <div id="chips" class="chips"></div>
+        <textarea id="input" rows="1" placeholder="Describe a change, paste or drop images…"></textarea>
+        <div class="composer-row">
+          <button type="button" class="icon-btn" id="attachBtn" title="Attach images"><svg viewBox="0 0 24 24"><path d="M21 11.5 12.5 20a5 5 0 0 1-7-7l9-9a3.5 3.5 0 0 1 5 5l-9 9a2 2 0 0 1-3-3l8-8"/></svg></button>
+          <input type="file" id="fileInput" multiple accept="image/*,.pdf,.txt,.md,.json,.css,.html,.svg" hidden>
+          <span id="mini" class="mini-status"></span>
+          <span class="spacer"></span>
+          <button type="button" class="btn danger small" id="stopBtn" hidden>Stop</button>
+          <button type="submit" class="btn primary small" id="sendBtn">Send</button>
+        </div>
+      </form>
+    </div>
+  </aside>
+
+  <div id="float" class="float" hidden>
+    <div id="floatHandle" class="float-handle">
+      <span class="grip" aria-hidden="true"></span>
+      <span id="floatStatus" class="float-status"></span>
+      <span class="spacer"></span>
+      <button class="icon-btn small" id="floatHide" title="Hide (H)"><svg viewBox="0 0 24 24"><path d="M5 12h14"/></svg></button>
+      <button class="icon-btn small" id="fsExit" title="Exit fullscreen (Esc)"><svg viewBox="0 0 24 24"><path d="M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5"/></svg></button>
+    </div>
+    <div id="floatSlot"></div>
+  </div>
+  <button id="floatShow" class="float-show" hidden title="Show prompt (H)"><svg viewBox="0 0 24 24"><path d="M4 5h16v11H8l-4 4z"/></svg></button>
+
+  <div id="statePop" class="state-pop" hidden>
+    <div class="sp-panel" role="dialog" aria-modal="true" aria-labelledby="spTitle">
+      <div class="sp-head">
+        <span id="spTitle" class="sp-title"></span>
+        <div id="spChips" class="seg" role="group" aria-label="States"></div>
+        <span class="spacer"></span>
+        <span class="sp-hint">← → to switch · Esc to close</span>
+        <button class="icon-btn sp-close" id="spClose" title="Close (Esc)" aria-label="Close"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
+      </div>
+      <div id="spStage" class="sp-stage"></div>
+    </div>
+  </div>
+
+  <div id="probeHost" class="probe-host" aria-hidden="true"></div>
+
+  <div id="ended" class="ended" hidden><div>Session ended. You can close this tab.</div></div>
+</div>
+<script src="/ui/app.js"></script>
+</body>
+</html>
