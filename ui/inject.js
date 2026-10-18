@@ -72,6 +72,8 @@
     "html.uis-isolate::-webkit-scrollbar{display:none}" +
     "html.uis-isolate body *:not([data-uis-target],[data-uis-target] *){visibility:hidden!important}" +
     "html.uis-isolate [data-uis-target]{visibility:visible!important}" +
+    // Element and isolate views are framed by the studio; the page itself must not scroll under the frame.
+    "html.uis-framed,html.uis-framed body{overflow:hidden!important}" +
     // Framework dev badges and overlays are not part of the design; errors reach the agent instead.
     "nextjs-portal,vite-error-overlay,astro-dev-toolbar,#webpack-dev-server-client-overlay,#__next-build-watcher{display:none!important}";
 
@@ -189,6 +191,7 @@
     }
     if (forced && (!marked.length || !marked[0][0].isConnected || !target?.contains(marked[0][0]))) applyForced();
     root.classList.toggle("uis-isolate", !!el && cfg.scope === "isolate");
+    root.classList.toggle("uis-framed", !!el && cfg.scope !== "page");
     let msg;
     if (!el) {
       msg = { type: "rect", found: false, page: true };
@@ -198,9 +201,11 @@
         msg = { type: "rect", found: true, page: true, interactive };
       } else {
         let r = el.getBoundingClientRect();
-        if (r.bottom < 0 || r.top > innerHeight || r.right < 0 || r.left > innerWidth) {
-          el.scrollIntoView({ block: "center", inline: "center" });
-          r = el.getBoundingClientRect();
+        // Not fully in view: bring its top-left corner in (with a margin). The studio grows the frame when the
+        // element is larger than the viewport, so the whole element ends up inside it.
+        if (r.top < 0 || r.left < 0 || r.bottom > innerHeight || r.right > innerWidth) {
+          const x = Math.max(0, r.left + scrollX - 24), y = Math.max(0, r.top + scrollY - 24);
+          if (x !== scrollX || y !== scrollY) { scrollTo(x, y); r = el.getBoundingClientRect(); }
         }
         msg = { type: "rect", found: true, interactive, rect: { x: r.left, y: r.top, w: r.width, h: r.height }, look: look(el) };
       }

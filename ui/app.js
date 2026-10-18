@@ -114,10 +114,16 @@ class View {
     const pr = PRESETS[prefs.preset];
     // Every view lays the page out at the main preview's viewport, so small tiles only scale, never reflow.
     const vp = live?.frame && live !== this ? live.host : this.host;
-    const p = pr ? { w: pr[0], h: pr[1] } : { w: Math.max(vp.clientWidth, 1), h: Math.max(vp.clientHeight, 1) };
+    let p = pr ? { w: pr[0], h: pr[1] } : { w: Math.max(vp.clientWidth, 1), h: Math.max(vp.clientHeight, 1) };
     const i = this.info;
     const sc = this.scope();
     if (!i || !i.found || i.page || sc === "page") return { mode: "page", W, H, p, s: Math.min(1, W / p.w, H / p.h) };
+    // A target larger than the frame's layout viewport would be cut off at the frame's edge: grow the frame to
+    // contain it (height always, width only without a fixed width preset), then scale to fit as usual. Skipped
+    // for elements that size themselves to the viewport (a 100vh hero would grow with the frame), and capped.
+    const cur = this.frameSize || p, need = { w: i.rect.x + i.rect.w + 24, h: i.rect.y + i.rect.h + 24 };
+    if (need.h > p.h && Math.abs(i.rect.h - cur.h) > 2) p = { ...p, h: Math.min(Math.ceil(need.h), p.h * 4) };
+    if (!pr && need.w > p.w && Math.abs(i.rect.w - cur.w) > 2) p = { ...p, w: Math.min(Math.ceil(need.w), p.w * 4) };
     const iso = sc === "isolate";
     const pad = iso ? Math.max(12, Math.min(72, Math.min(W, H) * 0.12)) : Math.max(20, Math.min(96, Math.min(W, H) * 0.16));
     const m = iso ? ISO_MARGIN : 0;
@@ -129,6 +135,7 @@ class View {
     const f = this.frame;
     f.style.width = m.p.w + "px";
     f.style.height = m.p.h + "px";
+    this.frameSize = m.p;
     const look = m.mode === "iso" ? this.info.look : null;
     this.box.classList.toggle("el", m.mode !== "page");
     this.box.classList.toggle("iso", m.mode === "iso");
