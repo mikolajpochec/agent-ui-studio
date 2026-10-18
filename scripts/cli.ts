@@ -105,16 +105,16 @@ switch (cmd) {
     const sessionDir = join(HOME, projKey, name);
     mkdirSync(sessionDir, { recursive: true });
     const runtimeFile = join(sessionDir, "runtime.json");
+    const update = await checkForUpdate();
     if (existsSync(runtimeFile)) {
       const rt = JSON.parse(readFileSync(runtimeFile, "utf8"));
       const alive = await fetch(rt.url + "/ui/app.js").then(() => true, () => false);
       if (alive) {
         const window = o["no-open"] ? "not opened" : openAppWindow(rt.url, sessionDir);
-        console.log(JSON.stringify({ ...rt, sessionDir, resumed: true, note: "already running", window }, null, 2));
+        console.log(JSON.stringify({ ...rt, sessionDir, resumed: true, note: "already running", window, version: version(), ...(update ? { update } : {}) }, null, 2));
         break;
       }
     }
-    const update = await checkForUpdate();
     const resumed = existsSync(join(sessionDir, "state.json"));
     writeFileSync(join(sessionDir, "config.json"), JSON.stringify({
       name, title: o.title || name, project, mode, upstream: o.upstream, root: o.root,
@@ -158,7 +158,8 @@ switch (cmd) {
   }
   case "list": {
     if (!existsSync(HOME)) break;
-    for (const proj of readdirSync(HOME)) for (const s of readdirSync(join(HOME, proj))) {
+    const dirs = (d: string) => readdirSync(d, { withFileTypes: true }).filter((e) => e.isDirectory()).map((e) => e.name);
+    for (const proj of dirs(HOME)) for (const s of dirs(join(HOME, proj))) {
       const rt = join(HOME, proj, s, "runtime.json");
       if (!existsSync(rt)) continue;
       const conf = JSON.parse(readFileSync(join(HOME, proj, s, "config.json"), "utf8"));

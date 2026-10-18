@@ -19,4 +19,4 @@ UI Studio uses [Semantic Versioning](https://semver.org). The installed version 
 
 ## How users get it
 
-`ui-studio start` checks the latest GitHub release at most once a day (2 s timeout, `UI_STUDIO_NO_UPDATE_CHECK=1` turns it off). When a newer one is out, the studio window shows "Update X.Y.Z" and Claude mentions it once. When the user asks, Claude runs `ui-studio update`, which checks out the newest release tag and prints what changed.
+`ui-studio start` checks the latest GitHub release at most once a day (3 s timeout, `UI_STUDIO_NO_UPDATE_CHECK=1` turns it off). When a newer one is out, the studio window shows "Update X.Y.Z" and Claude mentions it once. When the user asks, Claude runs `ui-studio update`, which checks out the newest release tag and prints what changed.

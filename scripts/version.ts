@@ -5,7 +5,8 @@ import { homedir } from "node:os";
 
 export const REPO = "mikolajpochec/agent-ui-studio";
 export const SKILL_ROOT = join(import.meta.dir, "..");
-const CACHE = join(homedir(), ".ui-studio", "update-check.json");
+const CACHE_DIR = join(homedir(), ".cache", "ui-studio"); // not ~/.ui-studio: that holds only session folders
+const CACHE = join(CACHE_DIR, "update-check.json");
 const DAY = 24 * 60 * 60 * 1000;
 
 export const version = (): string => {
@@ -22,7 +23,7 @@ export function compare(a: string, b: string) {
 
 export type Update = { current: string; latest: string; url: string } | null;
 
-// Never slows a start by more than ~2s and never fails it; UI_STUDIO_NO_UPDATE_CHECK=1 turns it off.
+// Never slows a start by more than ~3s and never fails it; UI_STUDIO_NO_UPDATE_CHECK=1 turns it off.
 export async function checkForUpdate(force = false): Promise<Update> {
   if (process.env.UI_STUDIO_NO_UPDATE_CHECK) return null;
   const current = version();
@@ -32,12 +33,12 @@ export async function checkForUpdate(force = false): Promise<Update> {
     try {
       const r = await fetch(`https://api.github.com/repos/${REPO}/releases/latest`, {
         headers: { accept: "application/vnd.github+json", "user-agent": "ui-studio" },
-        signal: AbortSignal.timeout(2000),
+        signal: AbortSignal.timeout(3000),
       });
       if (r.ok) {
         const j: any = await r.json();
         cache = { checkedAt: Date.now(), latest: String(j.tag_name || "").replace(/^v/, ""), url: j.html_url };
-        mkdirSync(join(homedir(), ".ui-studio"), { recursive: true });
+        mkdirSync(CACHE_DIR, { recursive: true });
         writeFileSync(CACHE, JSON.stringify(cache));
       }
     } catch {}

@@ -32,7 +32,7 @@ const logFile = join(SKILL_ROOT, "CHANGELOG.md");
 const log = readFileSync(logFile, "utf8");
 const m = log.match(/^## Unreleased\n([\s\S]*?)(?=^## |(?![\s\S]))/m) || die("CHANGELOG.md has no '## Unreleased' section");
 const notes = m[1].trim() || die("nothing under '## Unreleased' in CHANGELOG.md");
-const date = new Date().toISOString().slice(0, 10);
+const date = new Date().toLocaleDateString("sv-SE"); // local YYYY-MM-DD
 writeFileSync(logFile, log.replace(m[0], `## Unreleased\n\n## ${next} (${date})\n\n${notes}\n\n`));
 writeFileSync(join(SKILL_ROOT, "VERSION"), next + "\n");
 

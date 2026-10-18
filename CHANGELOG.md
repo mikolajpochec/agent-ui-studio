@@ -4,7 +4,7 @@ Notable changes to UI Studio. Versions follow [Semantic Versioning](https://semv
 
 ## Unreleased
 
-## 1.0.0 (2026-10-18)
+## 1.0.0 (2026-10-19)
 
 First release.
 
