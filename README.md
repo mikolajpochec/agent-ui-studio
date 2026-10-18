@@ -6,14 +6,11 @@ A [Claude Code](https://claude.com/claude-code) skill for designing UI live. Poi
 
 ## What you get
 
-- **The real thing, live.** The preview is your app's own HTML, CSS and JS served by your dev server, fully interactive. No mockups and no screenshots.
-- **Only the element.** Claude mounts the component on a tiny workbench page with just the props, data and providers it needs, and the studio crops the view to it.
-- **Every UX state, always visible.** Hover, focus, pressed, loading, success, disabled and any other state the element has are live tiles under the preview. Hover a tile to enlarge it, click it to inspect it full size.
-- **Steer while it works.** A scoped chat with attachments, a "Working on color…" status, and suggestion cards that change with the current focus ("Warmer gold", "Less saturated"). Click one mid-work and Claude picks it up.
-- **Compare.** Ask for options and get live variants of the same component side by side, flip all of them to any state, and pick one: it becomes the real code and the throwaway variants are removed. There is also a before/after slider.
-- **Checkpoints.** Every finished step is saved and can be restored or compared.
-- **Fullscreen.** Just your UI and a floating prompt you can drag anywhere or hide with `H`.
-- **One studio per rework.** Each rework has its own title, color, window and history, and runs as a background agent with the context of your conversation, so your main Claude session stays free. Starting a rework again with the same title resumes it.
+- **Your real component, live.** Running in isolation on your dev server, not a mockup.
+- **Every UX state** as live tiles next to it.
+- **Steer while it works:** chat, live status and suggestion cards.
+- **Live variants** side by side, plus a before/after slider.
+- **Checkpoints and fullscreen.**
 
 ![Comparing three live variants](docs/compare.png)
 
