@@ -12,8 +12,6 @@ A [Claude Code](https://claude.com/claude-code) skill for designing UI live. Poi
 - **Live variants** side by side, plus a before/after slider.
 - **Checkpoints and fullscreen.**
 
-![Comparing three live variants](docs/compare.png)
-
 ## Install
 
 ### Ask your agent (recommended)
