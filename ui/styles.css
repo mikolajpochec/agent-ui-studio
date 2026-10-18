@@ -118,7 +118,8 @@ body.dragging iframe { pointer-events: none; }
 
 /* ---------- below preview ---------- */
 .below { background: var(--panel); border-top: 1px solid var(--line); padding: 10px 12px 12px; }
-.statusline { display: flex; align-items: center; gap: 8px; min-height: 20px; color: var(--muted); font-weight: 500; }
+.statusline { display: flex; align-items: center; gap: 8px; min-height: 20px; margin: 0 4px 8px; color: var(--muted); font-weight: 500; font-size: 12.5px; }
+.statusline > span:last-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .statusline.working { color: var(--text); }
 .spinner { width: 12px; height: 12px; border-radius: 50%; border: 2px solid var(--accent-soft); border-top-color: var(--accent); animation: spin .8s linear infinite; flex: none; }
 @keyframes spin { to { transform: rotate(360deg); } }
@@ -146,6 +147,8 @@ body.dragging iframe { pointer-events: none; }
 .msg { max-width: 92%; overflow-wrap: anywhere; }
 .msg.user { align-self: flex-end; background: var(--accent); color: var(--accent-text); padding: 8px 11px; border-radius: 12px 12px 4px 12px; }
 .msg.user .queued { display: block; font-size: 11px; opacity: .75; margin-top: 2px; }
+.msg.user .unqueue { all: unset; cursor: pointer; text-decoration: underline; text-underline-offset: 2px; }
+.msg.user .unqueue:hover { opacity: 1; }
 .msg.agent { align-self: flex-start; }
 .msg.agent p { margin: 0 0 6px; } .msg.agent p:last-child { margin: 0; }
 .msg.agent ul { margin: 4px 0; padding-left: 18px; }
@@ -169,7 +172,6 @@ body.dragging iframe { pointer-events: none; }
 .composer:focus-within { border-color: var(--accent); }
 .composer textarea { border: 0; outline: 0; resize: none; background: transparent; padding: 2px 4px; max-height: 160px; min-height: 22px; }
 .composer-row { display: flex; align-items: center; gap: 4px; }
-.mini-status { color: var(--faint); font-size: 11.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .chips { display: flex; gap: 6px; flex-wrap: wrap; }
 .chips:empty { display: none; }
 .chip { display: inline-flex; align-items: center; gap: 6px; padding: 2px 4px 2px 6px; border-radius: 7px; background: var(--panel); border: 1px solid var(--line); font-size: 12px; }
@@ -194,7 +196,6 @@ body.dragging iframe { pointer-events: none; }
   .app { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr) 45vh; }
   .side { border-left: 0; border-top: 1px solid var(--line); }
 }
-.app.fs .mini-status { display: none; }
 
 /* ---------- UX state strip ---------- */
 .states { flex: none; display: flex; flex-wrap: wrap; gap: 8px; padding: 8px 10px; background: var(--panel); border-top: 1px solid var(--line); position: relative; z-index: 5; }

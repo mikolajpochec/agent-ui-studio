@@ -39,7 +39,7 @@ Every `uis` command can print `EVENTS (handle before continuing):`. When it does
 
 | Event | What to do |
 |---|---|
-| `prompt` `{text, attachments, about}` | A request. `attachments` are absolute paths; view images with Read. `about` lists compare variants the user is commenting on ("re: B"). If it arrives while you are working, it is steering: adjust the current step to it, don't finish the old plan first. |
+| `prompt` `{text, attachments, about, steer}` | A request. `attachments` are absolute paths; view images with Read. `about` lists compare variants the user is commenting on ("re: B"). With `steer: true` it was sent into the step you are working on (the Steer button, or a suggestion card clicked mid-work): adjust the current step to it, don't finish the old plan first. Without `steer` it is a new request: the user queued it, and the studio hands queued requests to you only through `wait`, one at a time, so finish and report the current request first, then take it as the next one. |
 | `interrupt` | Stop the current step at once. Don't checkpoint it. `uis say` one line on where you stopped, then handle any prompt that came with it, or wait. |
 | `restored` `{checkpoint}` | The user restored a checkpoint, so the files on disk changed. Re-read the tracked files before editing again. |
 | `compare_request` `{checkpoints, mode}` | Build a live comparison of those states (see Compare). `id: "live"` means the current code; `s0` is the original. |

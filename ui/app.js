@@ -603,7 +603,18 @@ function renderChat() {
         }
         el.append(atts);
       }
-      if (m.role === "user" && m.delivered === false) el.append(h("span", "queued", "Queued, the agent will read it at its next step"));
+      if (m.role === "user" && m.delivered === false) {
+        if (m.steer) el.append(h("span", "queued", "Steering, the agent reads it at its next step"));
+        else {
+          // New requests wait their turn; until the agent picks one up it can be removed.
+          const n = S.messages.filter((x) => x.role === "user" && x.delivered === false && !x.steer).findIndex((x) => x.id === m.id) + 1;
+          const q = h("span", "queued", `Queued #${n}, runs after the current request · `);
+          const rm = h("button", "unqueue", "Remove");
+          rm.onclick = () => post("/api/unqueue", { id: m.id });
+          q.append(rm);
+          el.append(q);
+        }
+      }
     }
     chat.append(el);
   }
@@ -667,12 +678,14 @@ function renderStatus() {
     plain = S.suggestions.length ? "Ready. Pick a next step or type a prompt." : "Ready. Describe what you want to change.";
     el.append(h("span", null, plain));
   }
-  $("#mini").textContent = working ? plain : "";
   const fsStatus = $("#floatStatus");
   fsStatus.replaceChildren();
   if (working) fsStatus.append(h("span", "spinner"));
   fsStatus.append(h("span", null, plain));
   $("#stopBtn").hidden = !working;
+  // While the agent works, Enter queues a new request and Steer (⌘↵) adjusts the current one.
+  $("#steerBtn").hidden = !working;
+  $("#sendBtn").textContent = working ? "Queue" : "Send";
 }
 
 let shownCards = new Set();
@@ -685,7 +698,7 @@ function renderCards() {
     b.title = "Click to send. Shift+click to edit before sending.";
     b.onclick = (e) => {
       if (e.shiftKey || e.altKey) { input.value = t; autosize(); input.focus(); }
-      else send(t, [], []);
+      else send(t, [], [], S.status.phase === "working"); // a card clicked mid-work steers the current step
     };
     return b;
   }));
@@ -781,28 +794,30 @@ function addAbout(v) {
   input.focus();
 }
 
-async function send(text, files, about) {
+async function send(text, files, about, steer = false) {
   if (!text.trim() && !files.length) return;
   const fd = new FormData();
   fd.append("text", text);
+  fd.append("steer", steer ? "1" : "0");
   fd.append("about", JSON.stringify(about));
   for (const f of files) fd.append("files", f, f.name);
   await fetch("/api/prompt", { method: "POST", body: fd });
 }
 
-$("#composer").addEventListener("submit", (e) => {
-  e.preventDefault();
+function submitDraft(steer) {
   const text = input.value;
   if (!text.trim() && !draft.files.length) return;
-  send(text, draft.files, draft.about);
+  send(text, draft.files, draft.about, steer && S.status.phase === "working");
   input.value = "";
   draft.files = [];
   draft.about = [];
   renderChips();
   autosize();
-});
+}
+$("#composer").addEventListener("submit", (e) => { e.preventDefault(); submitDraft(false); });
+$("#steerBtn").onclick = () => submitDraft(true);
 input.addEventListener("keydown", (e) => {
-  if (e.key === "Enter" && !e.shiftKey && !e.isComposing) { e.preventDefault(); $("#composer").requestSubmit(); }
+  if (e.key === "Enter" && !e.shiftKey && !e.isComposing) { e.preventDefault(); submitDraft(e.metaKey || e.ctrlKey); }
 });
 input.addEventListener("paste", (e) => {
   const files = [...(e.clipboardData?.files || [])];

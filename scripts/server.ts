@@ -102,12 +102,23 @@ function pushEvent(ev: any, fromUser = true) {
   inbox.push(ev);
   if (fromUser) lastUserAt = Date.now();
   const w = waiters.shift();
-  if (w) { clearTimeout(w.timer); w.resolve(drain()); }
+  if (w) { clearTimeout(w.timer); w.resolve(drain(true)); }
   broadcast();
 }
 
-function drain() {
-  const events = inbox.splice(0);
+// Queued prompts (new requests sent while the agent works) reach it only through `wait`, one per call, so each
+// request gets its own turn. Everything else, steering prompts included, is delivered at the agent's next call.
+function drain(forWait = false) {
+  const events: any[] = [];
+  let tookQueued = false;
+  for (let i = 0; i < inbox.length; ) {
+    const ev = inbox[i];
+    if (ev.queued && (!forWait || tookQueued)) { i++; continue; }
+    if (ev.queued) tookQueued = true;
+    const { queued, ...delivered } = ev; // the agent only needs `steer`
+    events.push(delivered);
+    inbox.splice(i, 1);
+  }
   for (const ev of events) {
     // Any event that came from a chat message (prompt, pick, compare request) marks it as read.
     const m = ev.msgId && state.messages.find((m: any) => m.id === ev.msgId);
@@ -436,7 +447,7 @@ function contextText() {
   ];
   for (const m of state.messages) {
     if (m.role === "snapshot") lines.push(`  [checkpoint ${m.snapshotId}] ${m.text}`);
-    else lines.push(`  [${m.role}] ${m.text}${m.attachments?.length ? ` (attachments: ${m.attachments.map((a: any) => a.path).join(", ")})` : ""}`);
+    else lines.push(`  [${m.role}${m.role === "user" && m.delivered === false && !m.steer ? ", queued: arrives through wait" : ""}] ${m.text}${m.attachments?.length ? ` (attachments: ${m.attachments.map((a: any) => a.path).join(", ")})` : ""}`);
   }
   return lines.join("\n");
 }
@@ -487,8 +498,19 @@ const studio = Bun.serve({
           attachments.push({ name: (f as File).name, path: join(dir, name), url: `/attachments/${name}`, type: (f as File).type });
         }
         if (!text && !attachments.length) return Response.json({ ok: false });
-        const m = addMessage({ role: "user", text, attachments, about, delivered: false });
-        pushEvent({ type: "prompt", id: m.id, msgId: m.id, text, attachments: attachments.map((a) => a.path), about });
+        // Steering goes into the current step; anything else is a new request and waits its turn.
+        const steer = form.get("steer") === "1";
+        const m = addMessage({ role: "user", text, attachments, about, delivered: false, steer });
+        pushEvent({ type: "prompt", id: m.id, msgId: m.id, text, attachments: attachments.map((a) => a.path), about, steer, queued: !steer });
+        return Response.json({ ok: true });
+      }
+      if (p === "/api/unqueue" && req.method === "POST") {
+        const { id } = await json(req);
+        const i = inbox.findIndex((e) => e.queued && e.msgId === id);
+        if (i < 0) return Response.json({ ok: false, error: "already picked up" });
+        inbox.splice(i, 1);
+        state.messages = state.messages.filter((m: any) => m.id !== id);
+        broadcast();
         return Response.json({ ok: true });
       }
       if (p === "/api/interrupt" && req.method === "POST") {
@@ -559,7 +581,8 @@ const studio = Bun.serve({
         srv.timeout?.(req, 0);
         const { timeout = 50 } = await json(req);
         lastAgentAt = Date.now();
-        if (inbox.length) return agentReply();
+        const ready = drain(true);
+        if (ready.length) return Response.json({ ok: true, events: ready, idleFor: Math.round((Date.now() - lastUserAt) / 1000) });
         state.status = { phase: "idle", focus: "", text: "" };
         broadcast();
         const events = await new Promise<any[]>((res) => {
