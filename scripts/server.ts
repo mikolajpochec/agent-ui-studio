@@ -57,7 +57,7 @@ function publicState() {
   return {
     ...state,
     agent: agentPresence(),
-    config: { name: cfg.name, title: cfg.title, mode: cfg.mode, appUrl: mainAppUrl(), brief: cfg.brief || "" },
+    config: { name: cfg.name, title: cfg.title, mode: cfg.mode, appUrl: mainAppUrl(), brief: cfg.brief || "", version: cfg.version, update: cfg.update || null },
   };
 }
 let broadcastTimer: any;

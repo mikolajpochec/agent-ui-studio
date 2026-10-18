@@ -313,6 +313,13 @@ function render() {
   $("#title").textContent = c.title;
   document.title = `${c.title} · UI Studio`;
   applyIdentity(c.title);
+  const up = c.update, note = $("#updateNote");
+  note.hidden = !up;
+  if (up) {
+    note.textContent = `Update ${up.latest}`;
+    note.href = up.url;
+    note.title = `UI Studio ${up.latest} is available (you have ${up.current}). Ask Claude in your terminal to update UI Studio. Click for the release notes.`;
+  }
   if (!currentRoute) setRoute(S.target.route);
   renderLive();
   renderStates();

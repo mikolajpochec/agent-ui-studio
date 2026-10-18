@@ -140,6 +140,8 @@ body.dragging iframe { pointer-events: none; }
 .pill.listening i { background: var(--ok); }
 .pill.working i { background: var(--accent); animation: pulse 1.1s ease-in-out infinite; }
 .pill.away i { background: var(--warn); }
+.update-note { font-size: 12px; font-weight: 500; color: var(--accent); text-decoration: none; padding: 3px 8px; border-radius: 99px; border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent); white-space: nowrap; }
+.update-note:hover { background: color-mix(in srgb, var(--accent) 10%, transparent); }
 @keyframes pulse { 50% { opacity: .35; } }
 
 .chat { flex: 1; min-height: 0; overflow-y: auto; padding: 14px 12px; display: flex; flex-direction: column; gap: 10px; }

@@ -67,6 +67,10 @@ Then tell the user, in one or two lines, that the studio "<title>" is open and t
 
 The session ends when the user clicks Finish or closes the studio window (the window closes itself on Finish). The fork then cleans up and reports. When that report arrives, summarize the rework for the user in this session, under its title: what changed visually, the files touched, the final values or tokens, and anything left open. Keep it short and concrete. If it ended because the window was closed, add that running `start` with the same title reopens it with the full history.
 
+## Updates
+
+`start` prints `"update": {current, latest, url}` when a newer release of this skill is out (the studio window shows it too). Tell the user once, in one line after the studio opens: "UI Studio <latest> is out (you have <current>). Say 'update UI Studio' to get it." Never update on your own. When the user asks, run `SKILL_DIR/scripts/ui-studio update` and pass on the short summary of what changed that it prints. Studios already running keep the old version until they are started again.
+
 ## Rules for the main thread
 
 - One studio per rework. Several can run at once (different titles); never let two of them work on the same files.

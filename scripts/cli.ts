@@ -5,6 +5,7 @@ import { join, resolve, basename } from "node:path";
 import { homedir } from "node:os";
 import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
+import { version, checkForUpdate, clearUpdateCache, changesSince, compare, SKILL_ROOT, REPO } from "./version.ts";
 
 const HOME = join(homedir(), ".ui-studio");
 const argv = process.argv.slice(2);
@@ -113,11 +114,13 @@ switch (cmd) {
         break;
       }
     }
+    const update = await checkForUpdate();
     const resumed = existsSync(join(sessionDir, "state.json"));
     writeFileSync(join(sessionDir, "config.json"), JSON.stringify({
       name, title: o.title || name, project, mode, upstream: o.upstream, root: o.root,
       route: o.route || "/", selector: o.selector || "", scope: o.scope || "isolate",
       brief: o.brief || "", watch: !!o.watch, port: o.listen ? Number(o.listen) : 0,
+      version: version(), update,
     }, null, 2));
     const log = openSync(join(sessionDir, "server.log"), "a");
     spawn(process.execPath, [join(import.meta.dir, "server.ts"), sessionDir], { detached: true, stdio: ["ignore", log, log] }).unref();
@@ -125,7 +128,32 @@ switch (cmd) {
     if (!existsSync(runtimeFile)) die(`server failed to start, see ${join(sessionDir, "server.log")}`);
     const rt = JSON.parse(readFileSync(runtimeFile, "utf8"));
     const window = o["no-open"] ? "not opened" : openAppWindow(rt.url, sessionDir);
-    console.log(JSON.stringify({ ...rt, sessionDir, resumed, window }, null, 2));
+    console.log(JSON.stringify({ ...rt, sessionDir, resumed, window, version: version(), ...(update ? { update } : {}) }, null, 2));
+    break;
+  }
+  case "version": {
+    const update = await checkForUpdate(true);
+    console.log(update ? `UI Studio ${update.current}; ${update.latest} is available: ${update.url}` : `UI Studio ${version()} (latest)`);
+    break;
+  }
+  case "update": {
+    // Moves this checkout to the newest release tag. Only for installs that are git clones of the repo.
+    const git = (...a: string[]) => {
+      const r = Bun.spawnSync(["git", "-C", SKILL_ROOT, ...a]);
+      if (r.exitCode !== 0) die(`git ${a.join(" ")} failed: ${r.stderr.toString().trim()}`);
+      return r.stdout.toString().trim();
+    };
+    if (!existsSync(join(SKILL_ROOT, ".git"))) die(`${SKILL_ROOT} is not a git checkout: reinstall it from https://github.com/${REPO}`);
+    if (git("status", "--porcelain")) die(`${SKILL_ROOT} has local changes; not updating`);
+    git("fetch", "--quiet", "--tags", "--force", "origin");
+    const tags = git("tag", "--list", "v*").split("\n").filter((t) => /^v\d+\.\d+\.\d+$/.test(t)).sort(compare);
+    const latest = tags.at(-1)?.slice(1);
+    const before = version();
+    if (!latest || compare(latest, before) <= 0) { clearUpdateCache(); console.log(`UI Studio ${before} is the latest release`); break; }
+    git("checkout", "--quiet", `v${latest}`);
+    clearUpdateCache();
+    console.log(`UPDATED UI Studio ${before} -> ${latest}. Running studios keep the old version until they are started again (same --title resumes them).\n`);
+    console.log(changesSince(before) || "(no changelog entries)");
     break;
   }
   case "list": {
@@ -236,6 +264,8 @@ switch (cmd) {
   track <file>...                               snapshot originals BEFORE first edit
   checkpoint <label>                            save tracked files as a restorable step
   restore <id> | show <id> <file>
+  version                                       this version, and whether a newer release is out
+  update                                        move this install to the newest release
   before-after [checkpoint]                    slider: current vs last checkpoint (or the given one)
   compare <id[@upstream][:label]>... [--layout grid|side|slider] [--title T] | compare --close
   target [--route R] [--selector S] [--scope element|isolate|page]   verified first; refused if it would not render

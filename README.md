@@ -4,6 +4,7 @@
 
 <p align="center">
   <img alt="Claude Code skill" src="https://img.shields.io/badge/Claude_Code-skill-7a4dff?style=flat-square">
+  <a href="https://github.com/mikolajpochec/agent-ui-studio/releases"><img alt="Latest release" src="https://img.shields.io/github/v/release/mikolajpochec/agent-ui-studio?style=flat-square&color=2fd3ff"></a>
   <a href="LICENSE"><img alt="License: GPL-3.0" src="https://img.shields.io/badge/license-GPL--3.0-24292f?style=flat-square"></a>
   <a href="https://github.com/mikolajpochec/agent-ui-studio/stargazers"><img alt="GitHub stars" src="https://img.shields.io/github/stars/mikolajpochec/agent-ui-studio?style=flat-square&color=d4ff4f"></a>
 </p>
@@ -25,7 +26,9 @@ Tell Claude Code:
 
 > Install the UI Studio skill from https://github.com/mikolajpochec/agent-ui-studio
 
-It sets everything up (asking before it installs [Bun](https://bun.sh), if you don't have it) and tells you when it's ready. Later, ask it to update the skill the same way.
+It sets everything up (asking before it installs [Bun](https://bun.sh), if you don't have it) and tells you when it's ready.
+
+When a new release is out, the studio and Claude let you know; say "update UI Studio" to get it. See the [changelog](CHANGELOG.md) for what changed.
 
 ## Use
 
@@ -73,7 +76,7 @@ Every finished step is a checkpoint. Restore any of them from the chat, or compa
 Claude Code, a Chromium-based browser (Chrome, Brave, Edge, Chromium or Vivaldi) and macOS or Linux. If [Bun](https://bun.sh) is missing, Claude offers to install it.
 
 **Does anything leave my machine?**
-No. The studio is a local server bound to 127.0.0.1, and its window is a local browser window.
+Your code and designs don't. The studio is a local server bound to 127.0.0.1, and its window is a local browser window. The only outside request is a version check against GitHub's releases, at most once a day; set `UI_STUDIO_NO_UPDATE_CHECK=1` to turn it off.
 
 **What if I close the window by accident?**
 Closing it counts as Finish. Ask Claude to open the studio again with the same title and it picks up the session with its full history.
