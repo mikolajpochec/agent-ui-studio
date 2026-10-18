@@ -16,7 +16,7 @@ A [Claude Code](https://claude.com/claude-code) skill for designing UI live. Poi
 
 Tell Claude Code:
 
-> Install the UI Studio skill from https://github.com/mikolajpochec/claude-ui-studio
+> Install the UI Studio skill from https://github.com/mikolajpochec/agent-ui-studio
 
 It sets everything up (asking before it installs [Bun](https://bun.sh), if you don't have it) and tells you when it's ready. Later, ask it to update the skill the same way.
 
