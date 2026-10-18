@@ -23,14 +23,14 @@ A [Claude Code](https://claude.com/claude-code) skill for designing UI live. Poi
 
 Tell Claude Code:
 
-> Install the UI Studio skill from https://github.com/mikolajpochec/ui-studio
+> Install the UI Studio skill from https://github.com/mikolajpochec/claude-ui-studio
 
 That's it. The steps it follows are under [For agents](#for-agents) below.
 
 ### Manually
 
 ```sh
-git clone https://github.com/mikolajpochec/ui-studio ~/.claude/skills/ui-studio
+git clone https://github.com/mikolajpochec/claude-ui-studio ~/.claude/skills/ui-studio
 ```
 
 For a single project instead of all of them, clone it into `<project>/.claude/skills/ui-studio`. If you use a custom `CLAUDE_CONFIG_DIR`, clone it into `$CLAUDE_CONFIG_DIR/skills/ui-studio`.
