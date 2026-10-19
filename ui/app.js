@@ -395,6 +395,16 @@ function renderPaused() {
   }
 }
 
+// The agent is done with a step: load every preview again from the current code, in case hot reload missed
+// something. The main preview reloads behind the current one and swaps in once rendered (no flash).
+function refreshAll() {
+  if (!S || S.config.mode === "frames") return;
+  if (live?.frame && !liveSwapping) swapLive(live.url, liveVariant);
+  statesKey = "";
+  renderStates();
+  for (const v of views) if (v.group === "cmp" || v.group === "wipe") v.reload();
+}
+
 // ---------- UX states ----------
 // Live tiles of the target in each state, always next to the main preview.
 // Pseudo states (hover, focus, active) are forced by inject.js; others are rendered by the workbench via __UIS_STATE.
@@ -730,8 +740,9 @@ function renderChat() {
         }
         el.append(atts);
       }
+      if (m.role === "user" && m.steer && m.delivered && !m.acked) el.append(h("span", "queued", "Delivered, Claude is adjusting to it"));
       if (m.role === "user" && m.delivered === false) {
-        if (m.steer) el.append(h("span", "queued", "Steering, the agent reads it at its next step"));
+        if (m.steer) el.append(h("span", "queued", "Steering, Claude reads it at its next step"));
         else {
           // New requests wait their turn; until the agent picks one up it can be removed.
           const n = S.messages.filter((x) => x.role === "user" && x.delivered === false && !x.steer).findIndex((x) => x.id === m.id) + 1;
@@ -1047,6 +1058,7 @@ es.onmessage = (e) => {
   const d = JSON.parse(e.data);
   if (d.type === "state") { S = d.state; render(); }
   else if (d.type === "probe") runProbe(d);
+  else if (d.type === "refresh") refreshAll();
   else if (d.type === "stopped") { es.close(); closeWindow("Session ended."); }
 };
 es.onerror = () => {

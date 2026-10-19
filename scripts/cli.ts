@@ -1,10 +1,11 @@
 #!/usr/bin/env bun
 // ui-studio CLI: starts sessions and lets the agent talk to a running studio.
-import { existsSync, mkdirSync, readFileSync, writeFileSync, readdirSync, openSync } from "node:fs";
-import { join, resolve, basename } from "node:path";
+import { existsSync, mkdirSync, readFileSync, writeFileSync, readdirSync, openSync, rmSync } from "node:fs";
+import { join, resolve, basename, relative, isAbsolute } from "node:path";
 import { homedir } from "node:os";
 import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
+import { createWorkspace } from "./workspace.ts";
 import { version, checkForUpdate, clearUpdateCache, changesSince, compare, SKILL_ROOT, REPO } from "./version.ts";
 
 const HOME = join(homedir(), ".ui-studio");
@@ -44,8 +45,14 @@ async function call(path: string, body: any = {}, raw?: ArrayBuffer) {
   return data;
 }
 
+// Steering goes first and loud: the user changed what the current step should do.
 function printEvents(events: any[]) {
   if (!events?.length) return;
+  const steers = events.filter((e) => e.type === "steer_pending" || e.type === "answer" || (e.type === "prompt" && e.steer));
+  if (steers.length) {
+    console.log("!!! THE USER STEERED. Stop the current plan, adjust to this now, then `uis ack " + steers.map((e) => e.msgId).join(" ") + "`:");
+    for (const e of steers) console.log(`  [${e.msgId}] ${e.type === "answer" ? `answered "${e.question}": ${e.answer}` : e.text}`);
+  }
   console.log("EVENTS (handle before continuing):");
   for (const e of events) console.log(JSON.stringify(e));
 }
@@ -92,8 +99,27 @@ function openAppWindow(url: string, sessionDir: string) {
 }
 
 const slug = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 40) || "session";
+const sessionDirFor = (project: string, name: string) =>
+  join(HOME, `${basename(project)}-${createHash("sha1").update(project).digest("hex").slice(0, 6)}`, name);
 
 switch (cmd) {
+  case "workspace": {
+    // The studio's working copy of the project: all edits happen there; the original changes only at `apply`.
+    if (!o.title || o.title === true) die('--title is required (the same one `start` gets)');
+    const project = resolve(o.project || process.cwd());
+    const sessionDir = sessionDirFor(project, slug(o.name || o.title));
+    const work = join(sessionDir, "work"), wsFile = join(sessionDir, "workspace.json");
+    const resumed = existsSync(wsFile) && existsSync(work);
+    if (!resumed) {
+      mkdirSync(sessionDir, { recursive: true });
+      rmSync(work, { recursive: true, force: true });
+      const manifest = createWorkspace(project, work);
+      writeFileSync(wsFile, JSON.stringify({ original: project, work, createdAt: Date.now(), manifest }));
+    }
+    console.log(JSON.stringify({ workDir: work, original: project, resumed,
+      note: "Run the dev server inside workDir and edit only there. The original project stays untouched until `apply` at Finish." }, null, 2));
+    break;
+  }
   case "start": {
     if (!o.title || o.title === true) die('--title is required: a short name that tells this rework apart, e.g. --title "Settings · Save button"');
     const project = resolve(o.project || process.cwd());
@@ -101,8 +127,12 @@ switch (cmd) {
     const mode = o.mode || (o.upstream ? "app" : "static");
     if (!["app", "static", "frames"].includes(mode)) die("--mode must be app, static or frames");
     if (mode === "app" && !o.upstream) die("app mode needs --upstream <dev server url>");
-    const projKey = `${basename(project)}-${createHash("sha1").update(project).digest("hex").slice(0, 6)}`;
-    const sessionDir = join(HOME, projKey, name);
+    const sessionDir = sessionDirFor(project, name);
+    const wsFile = join(sessionDir, "workspace.json");
+    if (!existsSync(wsFile)) die(`no working copy yet: run \`ui-studio workspace --project ${project} --title "${o.title}"\` first, start the dev server inside its workDir, then start`);
+    const work: string = JSON.parse(readFileSync(wsFile, "utf8")).work;
+    // A static root given inside the original points at the same folder in the copy.
+    const inCopy = (p: string) => { const r = relative(project, resolve(p)); return r.startsWith("..") || isAbsolute(r) ? resolve(p) : join(work, r); };
     mkdirSync(sessionDir, { recursive: true });
     const runtimeFile = join(sessionDir, "runtime.json");
     const update = await checkForUpdate();
@@ -117,7 +147,7 @@ switch (cmd) {
     }
     const resumed = existsSync(join(sessionDir, "state.json"));
     writeFileSync(join(sessionDir, "config.json"), JSON.stringify({
-      name, title: o.title || name, project, mode, upstream: o.upstream, root: o.root,
+      name, title: o.title || name, project: work, original: project, mode, upstream: o.upstream, root: o.root ? inCopy(o.root) : undefined,
       route: o.route || "/", selector: o.selector || "", scope: o.scope || "isolate",
       brief: o.brief || "", watch: !!o.watch, port: o.listen ? Number(o.listen) : 0,
       version: version(), update,
@@ -260,7 +290,18 @@ switch (cmd) {
     break;
   }
   case "context": { const r = await call("/agent/context"); console.log(r.context); printEvents(r.events); break; }
-  case "stop": { await call("/agent/stop"); console.log("stopped"); break; }
+  case "ack": { const r = await call("/agent/ack", { ids: o._ }); console.log(r.acked.length ? `acked: ${r.acked.join(", ")}` : "nothing to ack"); printEvents(r.events); break; }
+  case "refresh": { const r = await call("/agent/refresh"); console.log(r.windows ? "previews reloading" : "no studio window open"); printEvents(r.events); break; }
+  case "apply": {
+    const r = await call("/agent/apply");
+    const list = (t: string, xs: string[]) => xs.length ? `${t}:\n${xs.map((x) => "  " + x).join("\n")}\n` : "";
+    console.log((r.conflicts.length ? "CONFLICTS (not applied; the user changed these in the original meanwhile):\n" + r.conflicts.map((x: string) => `  ${x}  (your version: ${join(r.work, x)})`).join("\n") + "\n" : "") +
+      (list("changed", r.changed) + list("created", r.created) + list("deleted", r.deleted) || "nothing to apply\n") +
+      (r.skipped.length ? `skipped (generated or git-ignored): ${r.skipped.join(", ")}\n` : "") + `applied to ${r.original}`);
+    printEvents(r.events);
+    break;
+  }
+  case "stop": { await call("/agent/stop", { discard: !!o.discard }); console.log("stopped"); break; }
   default:
     console.log(`ui-studio [-p PORT] <command> ...
   start --project DIR --title "Area · Element" --mode app|static|frames [--upstream URL] [--root DIR]
@@ -272,6 +313,10 @@ switch (cmd) {
   suggest <card>... [--focus F]                 replace the suggestion grid
   say <text> | say -  (stdin)                   chat reply (markdown), one to three short lines
   ask "Question?" "Option" "Option" [...]       question with clickable answers (2 to 5, recommended first)
+  workspace --project DIR --title "..."         make (or reuse) the working copy; run before start
+  ack [msgId...]                                confirm you acted on the user's steering (all if none given)
+  refresh                                       reload every preview from the current code
+  apply                                         write the copy's changes into the original (at Finish)
   track <file>...                               snapshot originals BEFORE first edit
   checkpoint <label>                            save tracked files as a restorable step
   restore <id> | show <id> <file>

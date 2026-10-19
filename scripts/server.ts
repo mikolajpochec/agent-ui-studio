@@ -3,11 +3,13 @@
 // Usage: bun server.ts <sessionDir>   (normally spawned by `ui-studio start`)
 import { existsSync, mkdirSync, readFileSync, writeFileSync, copyFileSync, rmSync, watch } from "node:fs";
 import { join, resolve, relative, dirname, isAbsolute, basename, extname } from "node:path";
+import { diffWorkspace, applyWorkspace } from "./workspace.ts";
 
 const sessionDir = resolve(process.argv[2] ?? "");
 const UI_DIR = resolve(import.meta.dir, "../ui");
 const cfg = JSON.parse(readFileSync(join(sessionDir, "config.json"), "utf8"));
-const projectRoot: string = cfg.project;
+const projectRoot: string = cfg.project; // the working copy (see workspace.ts); cfg.original is the user's project
+const wsFile = join(sessionDir, "workspace.json");
 const stateFile = join(sessionDir, "state.json");
 const enc = new TextEncoder();
 // Loopback only: the proxy strips CSP and frame headers and the agent API edits files, so nothing may be reachable from the network.
@@ -132,9 +134,20 @@ function drain(forWait = false) {
   return events;
 }
 
+// Steering (a Steer prompt, a card clicked mid-work, an answer to `ask`) must change what the agent is doing, so
+// it is repeated on every agent call until the agent acknowledges it with `ack`, and the calls that report or close
+// a step refuse to run before that.
+const unackedSteers = () => state.messages.filter((m: any) => m.role === "user" && m.steer && m.delivered && !m.acked);
+function requireSteersHandled() {
+  const open = unackedSteers();
+  if (open.length) throw new Error(`the user steered and you have not acted on it yet:\n${open.map((m: any) => `  [${m.id}] ${m.text}`).join("\n")}\nAdjust what you are doing to it, then \`uis ack ${open.map((m: any) => m.id).join(" ")}\`, then retry.`);
+}
 function agentReply(extra: any = {}) {
   lastAgentAt = Date.now();
-  return Response.json({ ok: true, ...extra, events: drain() });
+  const events = drain();
+  const fresh = new Set(events.map((e) => e.msgId));
+  for (const m of unackedSteers()) if (!fresh.has(m.id)) events.unshift({ type: "steer_pending", msgId: m.id, text: m.text });
+  return Response.json({ ok: true, ...extra, events });
 }
 
 function addMessage(m: any) {
@@ -509,7 +522,7 @@ function pageError(message: string, where: string) {
 
 function contextText() {
   const lines = [
-    `UI Studio session "${cfg.title}" (${cfg.mode} mode), project ${projectRoot}`,
+    `UI Studio session "${cfg.title}" (${cfg.mode} mode), working copy ${projectRoot}${cfg.original ? ` of ${cfg.original} (untouched until apply)` : ""}`,
     `Target: route ${state.target.route} selector ${state.target.selector || "(none)"} scope ${state.target.scope}`,
     `Brief: ${cfg.brief || "(none)"}`,
     `Tracked files: ${state.tracked.join(", ") || "(none)"}`,
@@ -717,12 +730,14 @@ const studio = Bun.serve({
       }
       // A question with clickable answers in the chat: the user never has to type a reply.
       if (p === "/agent/ask") {
+        requireSteersHandled();
         const { question = "", options = [] } = await json(req);
         if (!question || options.length < 2) throw new Error("ask needs a question and at least 2 options");
         const m = addMessage({ role: "agent", text: question, options: options.slice(0, 5), answered: null });
         return agentReply({ id: m.id });
       }
       if (p === "/agent/say") {
+        requireSteersHandled();
         const { text = "" } = await json(req);
         addMessage({ role: "agent", text });
         return agentReply();
@@ -738,6 +753,7 @@ const studio = Bun.serve({
       }
       if (p === "/agent/checkpoint") {
         srv.timeout?.(req, 0);
+        requireSteersHandled();
         const { label = "Checkpoint" } = await json(req);
         if (state.statesMode === "unset") checkpoint(label); // throws the states message first
         const v = await verify(state.target, stateTargets(), true);
@@ -745,6 +761,7 @@ const studio = Bun.serve({
         state.preview = null; // a checkpoint is the real code, so a picked variant no longer needs to be shown
         const id = checkpoint(label);
         saveDom(id, v.results);
+        for (const c of clients) sse(c, { type: "refresh" }); // the step is done: show it from a fresh load
         return agentReply({ id });
       }
       if (p === "/agent/check") {
@@ -767,6 +784,17 @@ const studio = Bun.serve({
         if (!from || !(rel in from.files)) throw new Error(`${rel} is not tracked`);
         const content = from.files[rel] === "absent" ? null : readFileSync(join(snapDir(from.id), rel), "utf8");
         return agentReply({ content });
+      }
+      if (p === "/agent/ack") {
+        const { ids = [] } = await json(req);
+        const open = unackedSteers().filter((m: any) => !ids.length || ids.includes(m.id));
+        for (const m of open) { m.acked = true; m.ackedAt = Date.now(); }
+        broadcast();
+        return agentReply({ acked: open.map((m: any) => m.id) });
+      }
+      if (p === "/agent/refresh") {
+        for (const c of clients) sse(c, { type: "refresh" });
+        return agentReply({ windows: clients.size });
       }
       if (p === "/agent/before-after") {
         const { before } = await json(req);
@@ -816,11 +844,42 @@ const studio = Bun.serve({
         return agentReply({ states: state.states });
       }
       if (p === "/agent/context") return agentReply({ context: contextText() });
+      // Writes what the working copy changed into the user's project. Nothing studio-specific may go along.
+      if (p === "/agent/apply") {
+        requireSteersHandled();
+        if (!existsSync(wsFile)) throw new Error("this session has no working copy");
+        const { variants, workbench } = leftovers();
+        if (variants.length || workbench.length) throw new Error(`clean up first (uis leftovers):\n${[...variants, ...workbench].join("\n")}`);
+        const ws = JSON.parse(readFileSync(wsFile, "utf8"));
+        const changes = diffWorkspace(ws.original, projectRoot, ws.manifest, state.workbench);
+        const tagged = [...changes.changed, ...changes.created].filter((rel) => {
+          const now = readFileSync(join(projectRoot, rel), "utf8");
+          const was = existsSync(join(ws.original, rel)) ? readFileSync(join(ws.original, rel), "utf8") : "";
+          return now.split("data-ui-studio").length > was.split("data-ui-studio").length;
+        });
+        if (tagged.length) throw new Error(`remove the data-ui-studio targeting attribute first: ${tagged.join(", ")}`);
+        applyWorkspace(ws.original, projectRoot, changes);
+        state.applied = { at: Date.now(), ...changes };
+        save();
+        return agentReply({ ...changes, original: ws.original, work: projectRoot });
+      }
       if (p === "/agent/stop") {
+        const { discard = false } = await json(req);
+        if (existsSync(wsFile) && !state.applied && !discard) {
+          const ws = JSON.parse(readFileSync(wsFile, "utf8"));
+          const c = diffWorkspace(ws.original, projectRoot, ws.manifest, state.workbench);
+          if (c.changed.length + c.created.length + c.deleted.length + c.conflicts.length)
+            throw new Error("the working copy has changes that are not in the project yet: run `uis apply` first (or `stop --discard` to drop them)");
+        }
         closeAppWindow();
         setTimeout(() => {
           rmSync(join(sessionDir, "runtime.json"), { force: true });
           rmSync(join(sessionDir, "window"), { recursive: true, force: true });
+          // The copy has served its purpose once applied cleanly (or discarded); with conflicts it stays for merging.
+          if (existsSync(wsFile) && (discard || (state.applied && !state.applied.conflicts.length))) {
+            rmSync(projectRoot, { recursive: true, force: true });
+            rmSync(wsFile, { force: true });
+          }
           writeFileSync(stateFile, JSON.stringify(state, null, 2));
           process.exit(0);
         }, 1500);

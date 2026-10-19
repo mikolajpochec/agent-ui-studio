@@ -4,6 +4,12 @@ Notable changes to UI Studio. Versions follow [Semantic Versioning](https://semv
 
 ## Unreleased
 
+- Steering is never missed: Claude is reminded of a steer on every step until it confirms it acted on it, and can't report or checkpoint before that. The chat shows when Claude has it.
+
+- When Claude finishes a step or a request, every preview reloads from the current code, so the studio never shows a stale design (`uis refresh`).
+
+- Your project no longer changes during a session. Each studio works on its own working copy with its own dev server, and Finish applies the changes to the project. Files you edited there in the meantime are reported as conflicts, never overwritten.
+
 ## 1.0.3 (2026-10-19)
 
 - While the preview can't show the design (dev server down, page broken mid-edit, reloading), the last working design stays up: shrunk, greyed out, with a big loading indicator.
