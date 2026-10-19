@@ -4,6 +4,8 @@ Notable changes to UI Studio. Versions follow [Semantic Versioning](https://semv
 
 ## Unreleased
 
+## 1.1.0 (2026-10-19)
+
 - Steering is never missed: Claude is reminded of a steer on every step until it confirms it acted on it, and can't report or checkpoint before that. The chat shows when Claude has it.
 
 - When Claude finishes a step or a request, every preview reloads from the current code, so the studio never shows a stale design (`uis refresh`).
