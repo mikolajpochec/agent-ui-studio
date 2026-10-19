@@ -4,6 +4,8 @@ Notable changes to UI Studio. Versions follow [Semantic Versioning](https://semv
 
 ## Unreleased
 
+- While the preview can't show the design (dev server down, page broken mid-edit, reloading), the last working design stays up: shrunk, greyed out, with a big loading indicator.
+
 ## 1.0.2 (2026-10-19)
 
 - Questions come with clickable answers in the chat (`uis ask`), so you never have to type a reply. Choices between looks are shown as variants instead.

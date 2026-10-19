@@ -79,7 +79,7 @@ class View {
   setImage(src) { if (this.img && this.img.getAttribute("src") !== src) this.img.src = src; }
   reload() { if (this.frame) { this.info = null; this.showCover(false); this.frame.src = this.url; } }
   configure() {
-    try { this.frame?.contentWindow?.postMessage({ __uis: true, type: "config", selector: this.sel(), scope: this.scope() }, "*"); } catch {}
+    try { this.frame?.contentWindow?.postMessage({ __uis: true, type: "config", selector: this.sel(), scope: this.scope(), keep: this === live }, "*"); } catch {}
   }
   setInfo(d) {
     this.info = d;
@@ -88,10 +88,13 @@ class View {
       clearTimeout(this.healTimer);
       this.healTimer = null;
       this.cover.hidden = true;
+      if (d.found) this.everFound = true;
+      if (this === live) renderPaused();
     } else this.missing();
   }
   showCover(failed) {
     this.cover.hidden = false;
+    if (this === live) renderPaused();
     this.cover.classList.toggle("failed", failed);
     this.cover.lastElementChild.textContent = failed
       ? (this.still ? "Unavailable" : "This preview can't render the element right now. The agent has been notified.")
@@ -208,6 +211,7 @@ addEventListener("message", (e) => {
   if (d.type === "ready") { v.info = null; v.configure(); if (v === live) setRoute(d.url); }
   else if (d.type === "rect") { v.setInfo(d); layoutGroup(v.group); if (v === live) renderStates(); }
   else if (d.type === "nav" && v === live) setRoute(d.url);
+  else if (d.type === "dom" && d.keep) { if (v === live && d.html) { post("/api/last-good", { html: d.html }); lastGood++; } }
   else if (d.type === "dom") v.onDom?.(d.html);
   else if (d.type === "error") {
     if (v.errors) v.errors.push(d.message);
@@ -373,6 +377,22 @@ function swapLive(url, variant) {
     renderCompare();
   };
   reveal();
+}
+
+// While the main preview can't show the design (dev server down, page broken mid-edit, reloading), the last
+// design it rendered fine stays up: shrunk, greyed out, with a big spinner. Only after it has rendered once.
+let lastGood = 0, pausedView = null, pausedOf = 0;
+function renderPaused() {
+  const box = $("#paused");
+  if (!box) return; // frames mode replaces the stage's content
+  const show = !!(live?.frame && live.everFound && !live.cover.hidden && lastGood && !liveSwapping && S.config.mode !== "frames");
+  box.hidden = !show;
+  if (!show) return;
+  if (!pausedView || pausedOf !== lastGood) {
+    pausedView?.destroy();
+    pausedOf = lastGood;
+    pausedView = new View($("#pausedCard"), { url: `${S.config.appUrl}/__uis/dom/last/default.html?n=${lastGood}`, selector: "[data-uis-snap-root]", still: true, heal: false, group: "paused" });
+  }
 }
 
 // ---------- UX states ----------

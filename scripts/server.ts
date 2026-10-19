@@ -169,8 +169,8 @@ function saveDom(id: string, results: any[] = []) {
   if (saved.length) { snap.dom = saved; broadcast(); }
 }
 function domResponse(pathname: string) {
-  const m = pathname.match(/^\/__uis\/dom\/(s\d+)\/([\w-]+)\.html$/);
-  const file = m && [join(domDir(m[1]), `${m[2]}.html`), join(domDir(m[1]), "default.html")].find((f) => existsSync(f));
+  const m = pathname.match(/^\/__uis\/dom\/(s\d+|last)\/([\w-]+)\.html$/);
+  const file = m && (m[1] === "last" ? [lastGoodFile] : [join(domDir(m[1]), `${m[2]}.html`), join(domDir(m[1]), "default.html")]).find((f) => existsSync(f));
   if (!file) return new Response("no snapshot", { status: 404 });
   return new Response(injectHtml(readFileSync(file, "utf8"), false), { headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" } });
 }
@@ -193,6 +193,9 @@ function openBeforeAfter(before?: string) {
   broadcast();
   return { built: true, id, label };
 }
+
+// The last design the main preview rendered fine, shown greyed out while the preview is broken or reloading.
+const lastGoodFile = join(sessionDir, "last-good.html");
 
 // Whether the tracked files differ from a checkpoint.
 function changedSince(id: string) {
@@ -620,6 +623,11 @@ const studio = Bun.serve({
           pushEvent({ type: "compare_request", checkpoints: [{ id: r.id, label: r.label }, { id: "live", label: "Current" }], mode: "before_after", msgId: m.id });
         }
         return Response.json({ ok: true, built: r.built });
+      }
+      if (p === "/api/last-good" && req.method === "POST") {
+        const { html = "" } = await json(req);
+        if (html) writeFileSync(lastGoodFile, html);
+        return Response.json({ ok: true });
       }
       if (p === "/api/answer" && req.method === "POST") {
         const { id, option } = await json(req);

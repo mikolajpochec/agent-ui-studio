@@ -234,3 +234,9 @@ body.dragging iframe { pointer-events: none; }
 .msg .ask { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
 .msg .ask .btn:disabled:not(.on) { opacity: .45; }
 .msg .ask .btn.on:disabled { opacity: 1; }
+/* The last working design while the preview is broken or reloading (see renderPaused). */
+.paused { position: absolute; inset: 0; z-index: 4; background-color: var(--stage); background-image: radial-gradient(color-mix(in srgb, var(--faint) 35%, transparent) 1px, transparent 1px); background-size: 18px 18px; }
+.paused-card { position: absolute; inset: 9%; border-radius: 18px; overflow: hidden; background: var(--panel); box-shadow: 0 24px 60px -18px rgba(0,0,0,.35), 0 0 0 1px var(--line); filter: grayscale(1); opacity: .5; }
+.paused-card .view .cover { display: none; }
+.paused-spin { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); display: flex; flex-direction: column; align-items: center; gap: 14px; padding: 26px 30px 20px; border-radius: 22px; background: var(--panel); box-shadow: 0 18px 50px -12px rgba(0,0,0,.3), 0 0 0 1px var(--line); color: var(--fg, inherit); font-weight: 600; font-size: 14px; white-space: nowrap; pointer-events: none; }
+.paused-spin span { width: 64px; height: 64px; border-radius: 50%; border: 6px solid color-mix(in srgb, var(--accent) 16%, transparent); border-top-color: var(--accent); animation: spin .9s linear infinite; }

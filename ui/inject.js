@@ -293,6 +293,18 @@
       `<body><div style="display:flow-root;width:max-content;${bg ? `background:${bg};` : ""}">${body}</div></body></html>`;
   }
 
+  // The main preview (`keep`) sends a frozen copy of the target whenever the page settles after a change, so the
+  // studio can still show the last working design while the page is broken or reloading.
+  let keepTimer = null;
+  function keepFresh() {
+    if (!cfg.keep) return;
+    clearTimeout(keepTimer);
+    keepTimer = setTimeout(() => {
+      if (!find()) return; // broken right now: keep the previous copy
+      try { post({ type: "dom", keep: true, html: snapshotDoc() }); } catch {}
+    }, 1200);
+  }
+
   let queued = false;
   // rAF is paused in off-screen cross-origin frames (used for render checks), so a timer backs it up.
   const schedule = () => {
@@ -306,13 +318,17 @@
   window.addEventListener("message", (e) => {
     const d = e.data;
     if (!d || !d.__uis || e.source !== window.parent) return;
-    if (d.type === "config") { cfg = { ...cfg, selector: d.selector, scope: d.scope }; last = ""; schedule(); }
+    if (d.type === "config") { cfg = { ...cfg, selector: d.selector, scope: d.scope, keep: !!d.keep }; last = ""; schedule(); keepFresh(); }
     if (d.type === "serialize") { let html = null; try { update(); html = snapshotDoc(); } catch (err) { report(`snapshot failed: ${text(err)}`); } post({ type: "dom", req: d.req, html }); }
   });
 
   const start = () => {
     (document.head || root).appendChild(style);
-    new MutationObserver(schedule).observe(document, { subtree: true, childList: true, attributes: true, characterData: true });
+    new MutationObserver((list) => {
+      schedule();
+      // Our own markers don't count as a change of the design.
+      if (cfg.keep && list.some((m) => !(m.type === "attributes" && m.attributeName?.startsWith("data-uis")) && !(m.target === root && m.attributeName === "class"))) keepFresh();
+    }).observe(document, { subtree: true, childList: true, attributes: true, characterData: true });
     addEventListener("resize", schedule);
     addEventListener("scroll", schedule, true);
     setInterval(schedule, 700);
